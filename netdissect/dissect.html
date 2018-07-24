@@ -1,0 +1,252 @@
+<!doctype html>
+<html>
+<head>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+<script src="https://code.jquery.com/jquery-3.3.1.js" integrity="sha256-2Kok7MbOyxpgUVvAk/HJ2jigOSYS2auK4Pfzbm7uH60=" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.5.16/vue.js" integrity="sha256-CMMTrj5gGwOAXBeFi7kNokqowkzbeL8ydAJy39ewjkQ=" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/lodash@4.17.10/lodash.js" integrity="sha256-qwbDmNVLiCqkqRBpF46q5bjYH11j5cd+K+Y6D3/ja28=" crossorigin="anonymous"></script>
+<style>
+[v-cloak] {
+  display: none;
+}
+.unitviz, .unitviz .modal-header, .unitviz .modal-body, .unitviz .modal-footer {
+  font-family: Arial;
+  font-size: 15px;
+}
+.unitgrid {
+  text-align: center;
+  border-spacing: 5px;
+  border-collapse: separate;
+}
+.unitgrid .info {
+  text-align: left;
+}
+.unitgrid .layername {
+  display: none;
+}
+.unitlabel {
+  font-weight: bold;
+  font-size: 150%;
+  text-align: center;
+  line-height: 1;
+}
+.lowscore .unitlabel {
+   color: silver;
+}
+.thumbcrop {
+  overflow: hidden;
+  width: 288px;
+  height: 72px;
+}
+.unit {
+  display: inline-block;
+  background: white;
+  padding: 3px;
+  margin: 2px;
+  box-shadow: 0 5px 12px grey;
+}
+.iou {
+  display: inline-block;
+  float: right;
+}
+.modal .big-modal {
+  width:auto;
+  max-width:90%;
+  max-height:80%;
+}
+.modal-title {
+  display: inline-block;
+}
+.footer-caption {
+  float: left;
+  width: 100%;
+}
+.histogram {
+  text-align: center;
+  margin-top: 3px;
+}
+.img-wrapper {
+  text-align: center;
+}
+.big-modal img {
+  max-height: 60vh;
+}
+.img-scroller {
+  overflow-x: scroll;
+}
+.img-scroller .img-fluid {
+  max-width: initial;
+}
+.gridheader {
+  font-size: 12px;
+  margin-bottom: 10px;
+  margin-left: 30px;
+  margin-right: 30px;
+}
+.gridheader:after {
+  content: '';
+  display: table;
+  clear: both;
+}
+.sortheader {
+  float: right;
+  cursor: default;
+}
+.layerinfo {
+  float: left;
+}
+.sortby {
+  text-decoration: underline;
+  cursor: pointer;
+}
+.sortby.currentsort {
+  text-decoration: none;
+  font-weight: bold;
+  cursor: default;
+}
+.bg-inverse {
+  background: #021B54;
+}
+</style>
+</head>
+<body class="unitviz">
+<div id="app" v-if="dissect" v-cloak>
+
+<nav class="navbar navbar-expand navbar-dark bg-inverse">
+<span class="navbar-brand">{{ dissect.netname || 'Dissection' }}</span>
+<ul class="navbar-nav mr-auto">
+<li :class="{'nav-item': true, active: lindex == selected_layer}"
+    v-for="(lrec, lindex) in dissect.layers">
+ <a class="nav-link" :href="'#' + lindex"
+    >{{lrec.layer}}</a>
+</li>
+</ul>
+</nav>
+
+<div v-for="lrec in [dissect.layers[selected_layer]]">
+<div class="histogram">
+<a data-toggle="lightbox" :href="lrec.dirname + '/bargraph.svg?'+Math.random()"
+   :data-title="'Summary of ' + (dissect.netname || 'labels')
+          + ' at ' + lrec.layer">
+<img class="img-fluid" :src="lrec.dirname + '/bargraph.svg?'+Math.random()">
+</a>
+</div>
+
+<div class="gridheader">
+<div class="layerinfo">
+{{_.sum(_.map(lrec.labels,
+    function(x){return x.units.length;})) }}/{{lrec.units.length}} units
+covering {{lrec.labels.length}} concepts
+with IoU &ge; {{dissect.iou_threshold}}
+</div>
+
+<div class="sortheader">
+sort by
+<span :class="{sortby: true, currentsort: sort_order == 'label'}"
+        v-on:click="sort_order = 'label'">label</span>
+<span :class="{sortby: true, currentsort: sort_order == 'score'}"
+        v-on:click="sort_order = 'score'">score</span>
+<span :class="{sortby: true, currentsort: sort_order == 'unit'}"
+        v-on:click="sort_order = 'unit'">unit</span>
+</div>
+
+</div>
+<div class="unitgrid"
+><div :class="{unit: true, lowscore: !urec.interp}"
+        v-for="urec in _.orderBy(lrec.units,
+            sort_fields[sort_order][0], sort_fields[sort_order][1])">
+<div class="unitlabel">{{urec.label}}</div>
+<div class="info"
+ ><span class="layername">{{lrec.layer}}</span
+ > <span class="unitnum">unit {{urec.unit}}</span
+ > <span class="category">({{urec.cat}})</span
+ > <span class="iou">IoU {{urec.iou | fixed(2)}}</span></div>
+<div class="thumbcrop"
+><a data-toggle="lightbox"
+ :href="lrec.dirname + '/image/' + urec.unit + '-top.jpg'"
+><img
+ :src="lrec.dirname + '/image/' + urec.unit + '-top.jpg'"
+ height="72"></a></div>
+</div></div> <!-- end unit -->
+
+</div> <!-- end unit grid -->
+
+</div> <!-- end container -->
+
+</div> <!-- end app -->
+
+<div class="modal" id="lightbox">
+  <div class="modal-dialog big-modal" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"></h5>
+        <button type="button" class="close"
+             data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="img-wrapper img-scroller">
+          <img class="fullsize img-fluid">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="footer-caption">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+$(document).on('click', '[data-toggle=lightbox]', function(event) {
+    $('#lightbox img').attr('src', $(this).attr('href'));
+    $('#lightbox .modal-title').text($(this).data('title') ||
+       $(this).closest('.unit').find('.unitlabel').text());
+    $('#lightbox .footer-caption').text($(this).data('footer') ||
+       $(this).closest('.unit').find('.info').text());
+    event.preventDefault();
+    $('#lightbox').modal();
+    $('#lightbox img').closest('div').scrollLeft(0);
+});
+$(document).on('keydown', function(event) {
+    $('#lightbox').modal('hide');
+});
+
+var theapp = new Vue({
+  el: '#app',
+  data: {
+    sort_order: 'label',
+    sort_fields: {
+      label: [[], []],
+      score: [['iou'], ['desc']],
+      unit:  [['unit'], ['asc']],
+    },
+    selected_layer: null,
+    dissect: null
+  },
+  created: function() {
+    var self = this;
+    $.getJSON('dissect.json?' + Math.random(), function(d) {
+      self.dissect = d;
+      self.hashchange();
+    });
+    $(window).on('hashchange', function() { self.hashchange(); });
+  },
+  methods: {
+    hashchange: function() {
+      this.selected_layer = +window.location.hash.substr(1) || 0;
+    },
+  },
+  filters: {
+    fixed: function(value, digits, truncate) {
+       if (typeof value != 'number') return value;
+       var fixed = value.toFixed(digits);
+       return truncate ? +fixed : fixed;
+    }
+  }
+});
+</script>
+</body>
+</html>
