@@ -4,6 +4,14 @@ quick-netdissect
 This is a rewrite of netdissect to use native Pytorch idioms.
 Depends on python 3 and pytorch 4.1.
 
+## Setup
+
+Depends on having the Broden dataset available.  Run
+`script/dlbrodwn.sh` to download it into the `dataset/` directory.
+
+Also, if `conda` is available, `setup/setup_p3t41.sh` will create an
+Anaconda environment with python 3 and a current build of pytorch 4.1.
+
 ## API
 
 It can be used from code as a function, as follows:
