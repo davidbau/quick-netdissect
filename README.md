@@ -58,7 +58,7 @@ optional arguments:
   -h, --help            show this help message and exit
   --model MODEL         constructor for the model to test
   --pthfile PTHFILE     filename of .pth file for the model
-  --outdir OUTDIR       filename of Broden dataset
+  --outdir OUTDIR       directory for dissection output
   --broden BRODEN       filename of Broden dataset
   --layers LAYERS [LAYERS ...]
                         list of layer names to dissect
@@ -66,7 +66,7 @@ optional arguments:
   --imgsize IMGSIZE     input image size to use
   --examples EXAMPLES   number of image examples per unit
   --size SIZE           dataset subset size to use
-  --no-cuda             disables CUDA training
+  --no-cuda             disables CUDA usage
   --quiet               silences console output
 ```
 

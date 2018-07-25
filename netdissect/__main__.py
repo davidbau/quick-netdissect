@@ -35,7 +35,7 @@ def main():
     parser.add_argument('--pthfile', type=str, default=None,
                         help='filename of .pth file for the model')
     parser.add_argument('--outdir', type=str, default='dissect',
-                        help='filename of Broden dataset')
+                        help='directory for dissection output')
     parser.add_argument('--broden', type=str, default=None,
                         help='filename of Broden dataset')
     parser.add_argument('--layers', type=strpair, nargs='+',
@@ -49,7 +49,7 @@ def main():
     parser.add_argument('--size', type=int, default=10000,
                         help='dataset subset size to use')
     parser.add_argument('--no-cuda', action='store_true', default=False,
-                        help='disables CUDA training')
+                        help='disables CUDA usage')
     parser.add_argument('--quiet', action='store_true', default=False,
                         help='silences console output')
     args = parser.parse_args()
