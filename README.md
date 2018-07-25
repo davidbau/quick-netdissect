@@ -2,11 +2,11 @@ quick-netdissect
 ================
 
 This is a rewrite of netdissect to use native Pytorch idioms.
-It can be used from code as a function, as follows:
-
 Depends on python 3 and pytorch 4.1.
 
-To run dissection:
+## API
+
+It can be used from code as a function, as follows:
 
 1. Load up the convolutional model you wish to dissect, and call
    `retain_layers(model, [layernames,..])` to instrument the model.
@@ -40,9 +40,37 @@ Example:
             examples_per_unit=10)
 ```
 
-Dissection can also be run from the command-line using `python -m netdissect`.
+## Command Line
 
-For example, to dissect three layers of the pretrained alexnet in torchvision:
+Net dissect command-line utility.  Usage:
+
+```
+python -m netdissect [-h] --model MODEL [--pthfile PTHFILE]
+                     [--outdir OUTDIR] [--broden BRODEN]
+                     [--layers LAYERS [LAYERS ...]] [--netname NETNAME]
+                     [--imgsize IMGSIZE] [--examples EXAMPLES]
+                     [--size SIZE] [--no-cuda] [--quiet]
+```
+
+optional arguments:
+
+```
+  -h, --help            show this help message and exit
+  --model MODEL         constructor for the model to test
+  --pthfile PTHFILE     filename of .pth file for the model
+  --outdir OUTDIR       filename of Broden dataset
+  --broden BRODEN       filename of Broden dataset
+  --layers LAYERS [LAYERS ...]
+                        list of layer names to dissect
+  --netname NETNAME     name for network in generated reports
+  --imgsize IMGSIZE     input image size to use
+  --examples EXAMPLES   number of image examples per unit
+  --size SIZE           dataset subset size to use
+  --no-cuda             disables CUDA training
+  --quiet               silences console output
+```
+
+Example: to dissect three layers of the pretrained alexnet in torchvision:
 
 ```
 python -m netdissect \
