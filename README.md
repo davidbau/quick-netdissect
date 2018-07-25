@@ -20,12 +20,16 @@ It can be used from code as a function, as follows:
    `retain_layers(model, [layernames,..])` to instrument the model.
 2. Load the segmentation dataset using the BrodenDataset class;
    use the `transform_image` argument to normalize images to be
-   suitable for the model, or the size argument to truncate the dataset.
+   suitable for the model, and the `size` argument to truncate the dataset.
 3. Write a function to recover the original image (with RGB scaled to
    `[0...1]`) given a normalized dataset image; `ReverseNormalize` in this
    package inverts `torchvision.transforms.Normalize` for this purpose.
 4. Choose a directory in which to write the output, and call
    `dissect(outdir, model, dataset)`.
+
+A quick approximate dissection can be done by reducing the `size`
+of the `BrodenDataset`.  Generating example images can be time-consuming
+and the number of images can be set via `examples_per_unit`.
 
 Example:
 
