@@ -7,9 +7,9 @@ Depends on python 3 and pytorch 4.1.
 ## Setup
 
 Depends on having the Broden dataset available.  Run
-`script/dlbrodwn.sh` to download it into the `dataset/` directory.
+`script/dlbroden.sh` to download it into the `dataset/` directory.
 
-Also, if `conda` is available, `setup/setup_p3t41.sh` will create an
+Also, if `conda` is available, `script/setup_p3t41.sh` will create an
 Anaconda environment with python 3 and a current build of pytorch 4.1.
 
 ## API
