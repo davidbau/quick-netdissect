@@ -37,7 +37,6 @@ from xml.etree import ElementTree as et
 from collections import OrderedDict
 from .progress import verbose_progress, default_progress, print_progress
 from .runningstats import RunningQuantile, RunningTopK
-from .broden import BrodenDataset, scatter_batch
 from .sampler import FixedSubsetSampler
 from .actviz import activation_visualization
 
@@ -65,25 +64,34 @@ def dissect(outdir, model, dataset,
                 batch_size=batch_size, num_workers=num_workers,
                 pin_memory=(device.type == 'cuda'))
         quantiles, topk = collect_quantiles_and_topk(model, segloader,
-                k=examples_per_unit)
+                recover_image=recover_image, k=examples_per_unit)
         levels = {k: qc.quantiles([1.0 - quantile_threshold])[:,0]
                 for k, qc in quantiles.items()}
         if make_images:
             generate_images(outdir, model, dataset, topk, levels, recover_image,
-                    row_length=examples_per_unit, batch_size=batch_size)
+                    row_length=examples_per_unit, batch_size=batch_size,
+                    num_workers=num_workers)
         if make_report:
+            if hasattr(recover_image, 'get_label_and_category_names'):
+                labelnames, catnames = (
+                        recover_image.get_label_and_category_names(dataset))
+            else:
+                labelnames, catnames = broden_label_and_category_names(dataset)
+            primary_category = [catnames.index(c) for l, c in labelnames]
             segloader = torch.utils.data.DataLoader(dataset,
                     batch_size=1, num_workers=num_workers,
                     pin_memory=(device.type == 'cuda'))
-            lcs, ccs, ics = collect_bincounts(model, segloader, levels)
-            scores = {k: score_tally_stats(dataset, lcs, ccs[k], ics[k])
+            lcs, ccs, ics = collect_bincounts(model, segloader, levels,
+                    recover_image=recover_image)
+            scores = {
+                    k: score_tally_stats(primary_category, lcs, ccs[k], ics[k])
                     for k in ics}
-            generate_report(outdir,
-                    dataset, scores, lcs, ccs, ics, topk, levels, quantiles,
+            generate_report(outdir, labelnames, catnames,
+                    scores, lcs, ccs, ics, topk, levels, quantiles,
                     quantile_threshold, iou_threshold, netname=netname)
             return scores, topk, levels, quantiles
 
-def generate_report(outdir, dataset, scores, lc, ccs, ics,
+def generate_report(outdir, labelnames, catnames, scores, lc, ccs, ics,
         topks, levels, quantiles, quantile_threshold, iou_threshold,
         netname='Model'):
     '''
@@ -91,9 +99,9 @@ def generate_report(outdir, dataset, scores, lc, ccs, ics,
     specified output directory, and copies a dissection.html interface
     to go along with it.
     '''
-    catname = list(dataset.category.keys())
     catorder = {'object': -6, 'scene': -5, 'part': -4,
                 'material': -3, 'texture': -2, 'color': -1}
+    catnumber = {n: i for i, n in enumerate(catnames)}
     all_layers = []
     # Current source code directory, for html to copy.
     srcdir = os.path.realpath(
@@ -112,12 +120,12 @@ def generate_report(outdir, dataset, scores, lc, ccs, ics,
                 unit=u,
                 iou=score.item(),
                 lc=lc[label].item(),
-                cc=cc[dataset.primary_category[label], u].item(),
+                cc=cc[catnumber[labelnames[label][1]], u].item(),
                 ic=ic[label, u].item(),
                 interp=(score.item() > iou_threshold),
                 labelnum=label.item(),
-                label=readable(dataset.label[label.item()]['name']),
-                cat=catname[dataset.primary_category[label.item()]],
+                label=labelnames[label.item()][0],
+                cat=labelnames[label.item()][1],
                 level=lev[u].item(),
                 top=[dict(imgnum=i.item(), maxact=a.item())
                     for i, a in zip(topi[u], topa[u])]
@@ -138,14 +146,14 @@ def generate_report(outdir, dataset, scores, lc, ccs, ics,
 
         # Collate labels by category then frequency.
         record['labels'] = [dict(
-                    label=readable(dataset.label[label]['name']),
+                    label=labelnames[label][0],
                     labelnum=label,
                     units=labelunits[label],
-                    cat=catname[dataset.primary_category[label]])
+                    cat=labelnames[label][1])
                 for label in (sorted(labelunits.keys(),
                     # Sort by:
-                    key=lambda l: (catorder.get(catname[  # category
-                        dataset.primary_category[l]], 0),
+                    key=lambda l: (catorder.get(          # category
+                        labelnames[l][1], 0),
                         -len(labelunits[l]),              # label freq
                         -max(unit[u]['iou'] for u in labelunits[l]) # score
                         )))]
@@ -186,8 +194,10 @@ def generate_report(outdir, dataset, scores, lc, ccs, ics,
     shutil.copy(os.path.join(srcdir, 'dissect.html'),
             os.path.join(outdir, 'dissect.html'))
 
+
 def generate_images(outdir, model, dataset, topk, levels,
-        recover_image=None, row_length=None, gap_pixels=5, batch_size=100):
+        recover_image=None, row_length=None, gap_pixels=5, batch_size=100,
+        num_workers=24):
     '''
     Creates an image strip file for every unit of every retained layer
     of the model, in the format [outdir]/[layername]/[unitnum]-top.jpg.
@@ -202,7 +212,7 @@ def generate_images(outdir, model, dataset, topk, levels,
         recover_image = lambda x: x
     # Pass 1: needed_images lists all images that are topk for some unit.
     for layer in topk:
-        _, topresult = (d.cpu() for d in topk[layer].result())
+        topresult = topk[layer].result()[1].cpu()
         for unit, row in enumerate(topresult):
             for rank, imgnum in enumerate(row[:row_length]):
                 imgnum = imgnum.item()
@@ -214,34 +224,47 @@ def generate_images(outdir, model, dataset, topk, levels,
     needed_sample = FixedSubsetSampler(sorted(needed_images.keys()))
     device = next(model.parameters()).device
     segloader = torch.utils.data.DataLoader(dataset,
-            batch_size=batch_size, num_workers=24,
+            batch_size=batch_size, num_workers=num_workers,
             pin_memory=(device.type == 'cuda'),
             sampler=needed_sample)
     vizgrid = {}
     origrid = {}
     # Pass 2: populate vizgrid with visualizations of top units.
-    for i, (im, seg, bc) in enumerate(
+    for i, batch in enumerate(
             progress(segloader, desc='Making images')):
         # Reverse transformation to get the image in byte form.
-        byte_im = recover_image(im.clone()
-                ).permute(0, 2, 3, 1).mul_(255).clamp(0, 255).byte()
-        # Run the model.
-        model(im.to(device))
-        retained = {k: v.cpu().numpy() for k, v in model.retained.items()}
-        for index in range(len(im)):
+        if hasattr(recover_image, 'recover_image_and_features'):
+            byte_im, features, scale_offset = (
+                    recover_image.recover_image_and_features(
+                        batch, model))
+        else:
+            im, seg, bc = batch
+            byte_im = recover_image(im.clone()
+                    ).permute(0, 2, 3, 1).mul_(255).clamp(0, 255).byte()
+            # Run the model.
+            model(im.to(device))
+            features = model.retained
+            scale_offset = getattr(model, 'scale_offset', None)
+        byte_im = byte_im.cpu().numpy()
+        features = {k: v.cpu().numpy() for k, v in features.items()}
+        for index in range(len(byte_im)):
             imgnum = needed_sample.samples[index + i*segloader.batch_size]
             for layer, unit, rank in needed_images[imgnum]:
-                acts = retained[layer]
+                acts = features[layer]
                 if layer not in vizgrid:
                     vizgrid[layer], origrid[layer] = [
-                        numpy.full((acts.shape[1], im.shape[2], row_length,
-                            im.shape[3] + gap_pixels, 3), 255, dtype='uint8')
+                        numpy.full((acts.shape[1], byte_im.shape[1], row_length,
+                            byte_im.shape[2] + gap_pixels, 3), 255,
+                            dtype='uint8')
                         for _ in [0, 1]]
                 origrid[layer][unit,:,rank,:byte_im.shape[1],:] = byte_im[index]
                 vizgrid[layer][unit,:,rank,:byte_im.shape[1],:] = (
                     activation_visualization(
-                        byte_im[index], acts[index, unit], levels[layer][unit],
-                        scale_offset=model.scale_offset[layer]))
+                        byte_im[index],
+                        acts[index, unit],
+                        levels[layer][unit],
+                        scale_offset=scale_offset[layer]
+                                     if scale_offset else None))
     # Pass 3: save image strips as [outdir]/[layer]/[unitnum]-[top/orig].jpg
     for layer, vg in progress(vizgrid.items(), desc='Saving images'):
         os.makedirs(os.path.join(outdir, safe_dir_name(layer), 'image'),
@@ -255,13 +278,14 @@ def generate_images(outdir, model, dataset, topk, levels,
                         'image', '%d-%s.jpg' % (unit, suffix))
                 Image.fromarray(strip[:,:-gap_pixels,:]).save(filename)
 
-def score_tally_stats(dataset, lc, cc, ic):
-    ec = cc[dataset.primary_category]
+def score_tally_stats(primary_category, lc, cc, ic):
+    ec = cc[primary_category]
     epsilon = 1e-20 # avoid division-by-zero
     iou = ic.double() / ((ec + lc[:,None] - ic).double() + epsilon)
     return iou
 
-def collect_quantiles_and_topk(model, segloader, k=100, resolution=1024):
+def collect_quantiles_and_topk(model, segloader,
+        recover_image=None, k=100, resolution=1024):
     '''
     Collects (estimated) quantile information and (exact) sorted top-K lists
     for every channel in the retained layers of the model.  Returns
@@ -272,13 +296,12 @@ def collect_quantiles_and_topk(model, segloader, k=100, resolution=1024):
     topks = {}
     device = next(model.parameters()).device
     progress = default_progress()
-    for i, (im, seg, bc) in enumerate(progress(segloader, desc='Quantiles')):
-        # Ignore the segmentations for this pass.
-        im = im.to(device)
+    for i, batch in enumerate(progress(segloader, desc='Quantiles')):
         # We don't actually care about the model output.
-        model(im)
+        model(batch[0].to(device))
+        features = model.retained
         # We care about the retained values
-        for key, value in model.retained.items():
+        for key, value in features.items():
             if key not in topks:
                 topks[key] = RunningTopK(k)
             if key not in quantiles:
@@ -296,7 +319,7 @@ def collect_quantiles_and_topk(model, segloader, k=100, resolution=1024):
             topks[key].add(topvalue)
     return quantiles, topks
 
-def collect_bincounts(model, segloader, levels):
+def collect_bincounts(model, segloader, levels, recover_image=None):
     '''
     Returns label_counts, category_activation_counts, and intersection_counts,
     across the data set, counting the pixels of intersection between upsampled,
@@ -318,12 +341,20 @@ def collect_bincounts(model, segloader, levels):
     batch_size 1.
     '''
     device = next(model.parameters()).device
-    num_labels = segloader.dataset.num_labels
+    if hasattr(recover_image, 'get_label_and_category_names'):
+        labelcat, categories = recover_image.get_label_and_category_names(
+                segloader.dataset)
+        primary_category = [categories.index(c) for l, c in labelcat]
+        num_labels, num_categories = (len(n) for n in [labelcat, categories])
+    else:
+        num_labels = segloader.dataset.num_labels
+        num_categories = len(segloader.dataset.category)
+        primary_category = segloader.dataset.primary_category
     # One-hot vector of category for each label
-    labelcat = torch.zeros(segloader.dataset.num_labels,
-            len(segloader.dataset.category), dtype=torch.long, device=device)
-    labelcat.scatter_(1, torch.from_numpy(segloader.dataset.primary_category)
-            .to(device)[:,None], 1)
+    labelcat = torch.zeros(num_labels, num_categories,
+            dtype=torch.long, device=device)
+    labelcat.scatter_(1, torch.from_numpy(numpy.array(primary_category,
+        dtype='int64')).to(device)[:,None], 1)
     # Running bincounts
     # activation_counts = {}
     assert segloader.batch_size == 1 # category_activation_counts needs this.
@@ -331,23 +362,31 @@ def collect_bincounts(model, segloader, levels):
     intersection_counts = {}
     label_counts = torch.zeros(num_labels, dtype=torch.long, device=device)
     progress = default_progress()
-    scale_offset_map = getattr(model, 'scale_offset', {})
+    scale_offset_map = getattr(model, 'scale_offset', None)
     upsample_grids = {}
     # total_batch_categories = torch.zeros(
     #         labelcat.shape[1], dtype=torch.long, device=device)
-    for i, (im, seg, bc) in enumerate(progress(segloader, desc='Bincounts')):
-        im, seg, batch_label_counts = (d.to(device) for d in [im, seg, bc])
+    for i, batch in enumerate(progress(segloader, desc='Bincounts')):
+        if hasattr(recover_image, 'recover_im_seg_bc_and_features'):
+            im, seg, batch_label_counts, features, scale_offset_map = (
+                    recover_image.recover_im_seg_bc_and_features(
+                        batch, model))
+            bc = batch_label_counts.cpu()
+        else:
+            bc = batch[2]
+            im, seg, batch_label_counts = (d.to(device) for d in batch)
+            model(im)
+            features = model.retained
         # Accumulate bincounts and identify nonzeros
         label_counts += batch_label_counts[0]
-        model(im)
         batch_labels = bc[0].nonzero()[:,0]
         batch_categories = labelcat[batch_labels].max(0)[0]
-        # We care about the retained values
-        for key, value in model.retained.items():
+        for key, value in features.items():
             if key not in upsample_grids:
                 upsample_grids[key] = upsample_grid(value.shape[2:],
                         seg.shape[2:], im.shape[2:],
-                        scale_offset=scale_offset_map.get(key, None),
+                        scale_offset=scale_offset_map.get(key, None)
+                            if scale_offset_map is not None else None,
                         dtype=value.dtype, device=value.device)
             upsampled = torch.nn.functional.grid_sample(value,
                     upsample_grids[key], padding_mode='border')
@@ -473,6 +512,13 @@ def retain_layers(model, layer_names, add_scale_offset=True):
     for name in aka_map:
         assert name in seen, ('Layer %s not found' % name)
 
+def broden_label_and_category_names(dataset):
+    catnames = list(dataset.category.keys())
+    label_and_cat_names = [(readable(l['name']),
+        catnames[dataset.primary_category[i]])
+            for i, l in enumerate(dataset.label)]
+    return label_and_cat_names, catnames
+
 def safe_dir_name(filename):
     keepcharacters = (' ','.','_','-')
     return ''.join(c
@@ -489,14 +535,14 @@ bargraph_palette = [
 
 def make_svg_bargraph(labels, heights, categories,
         barheight=100, barwidth=12, show_labels=True, filename=None):
-    if len(labels) == 0:
-        return # Nothing to do
-    unitheight = float(barheight) / max(heights)
+    # if len(labels) == 0:
+    #     return # Nothing to do
+    unitheight = float(barheight) / max(heights, default=1)
     textheight = barheight if show_labels else 0
     labelsize = float(barwidth)
     gap = float(barwidth) / 4
     textsize = barwidth + gap
-    rollup = max(heights)
+    rollup = max(heights, default=1)
     textmargin = float(labelsize) * 2 / 3
     leftmargin = 32
     rightmargin = 8
@@ -511,17 +557,19 @@ def make_svg_bargraph(labels, heights, categories,
     basey = svgheight - textheight
     x = leftmargin
     # Add units scale on left
-    for h in [1, (max(heights) + 1) // 2, max(heights)]:
+    if len(heights):
+        for h in [1, (max(heights) + 1) // 2, max(heights)]:
+            et.SubElement(svg, 'text', x='0', y='0',
+                style=('font-family:sans-serif;font-size:%dpx;' +
+                'text-anchor:end;alignment-baseline:hanging;' +
+                'transform:translate(%dpx, %dpx);') %
+                (textsize, x - gap, basey - h * unitheight)).text = str(h)
         et.SubElement(svg, 'text', x='0', y='0',
-            style=('font-family:sans-serif;font-size:%dpx;text-anchor:end;'+
-            'alignment-baseline:hanging;' +
-            'transform:translate(%dpx, %dpx);') %
-            (textsize, x - gap, basey - h * unitheight)).text = str(h)
-    et.SubElement(svg, 'text', x='0', y='0',
-            style=('font-family:sans-serif;font-size:%dpx;text-anchor:middle;'+
-            'transform:translate(%dpx, %dpx) rotate(-90deg)') %
-            (textsize, x - gap - textsize, basey - h * unitheight / 2)
-            ).text = 'units'
+                style=('font-family:sans-serif;font-size:%dpx;' +
+                'text-anchor:middle;' +
+                'transform:translate(%dpx, %dpx) rotate(-90deg)') %
+                (textsize, x - gap - textsize, basey - h * unitheight / 2)
+                ).text = 'units'
     # Draw big category background rectangles
     for catindex, (cat, catcount) in enumerate(categories):
         if not catcount:
