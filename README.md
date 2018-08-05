@@ -1,8 +1,13 @@
-quick-netdissect
-================
+netdissect
+==========
 
-This is a rewrite of netdissect to use native Pytorch idioms.
-Depends on python 3 and pytorch 4.1.
+[Network Dissection](http://netdissect.csail.mit.edu/) is a way
+to inspect the internal representations of a deep convolutional
+neural network to understand how internal units align with
+human-interpretable concepts.
+
+This package is a rewrite of netdissect to use native Pytorch
+idioms: it depends on python 3 and pytorch 4.1.
 
 ## Setup
 
