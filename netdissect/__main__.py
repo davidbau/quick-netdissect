@@ -48,6 +48,10 @@ def main():
                         help='number of image examples per unit')
     parser.add_argument('--size', type=int, default=10000,
                         help='dataset subset size to use')
+    parser.add_argument('--batch_size', type=int, default=100,
+                        help='batch size for forward pass')
+    parser.add_argument('--num_workers', type=int, default=24,
+                        help='number of DataLoader workers')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA usage')
     parser.add_argument('--quiet', action='store_true', default=False,
@@ -96,8 +100,8 @@ def main():
     # Load broden dataset
     brodendir = args.broden
     if brodendir is None:
-        ds_resolution = (224 if args.imgsize == (224, 224) else
-                         227 if args.imgsize == (227, 227) else 384)
+        ds_resolution = (224 if max(args.imgsize) <= 224 else
+                         227 if max(args.imgsize) <= 227 else 384)
         brodendir = os.path.join('dataset', 'broden1_%d' % ds_resolution)
         # TODO: autodownload perhaps.
         print_progress('Loading broden from %s' % brodendir)
@@ -112,7 +116,9 @@ def main():
     dissect(args.outdir, model, bds,
             recover_image=ReverseNormalize(IMAGE_MEAN, IMAGE_STDEV),
             examples_per_unit=args.examples,
-            netname=args.netname)
+            netname=args.netname,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers)
 
 def test_dissection():
     verbose_progress(True)
