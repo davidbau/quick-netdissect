@@ -125,7 +125,7 @@
 </ul>
 <ul class="navbar-nav ml-auto" v-if="dissect.meta">
   <li class="navbar-text ml-2" v-for="(v, k) in dissect.meta">
-    {{k}}={{v}}
+    {{k}}={{v | fixed(3, true)}}
   </li>
 </ul>
 </nav>

@@ -1,4 +1,4 @@
-import torch, sys, os, argparse, textwrap, numbers
+import torch, sys, os, argparse, textwrap, numbers, numpy, json
 from torchvision import transforms
 from netdissect.progress import verbose_progress, print_progress
 from netdissect import retain_layers, BrodenDataset, dissect, ReverseNormalize
@@ -40,6 +40,8 @@ def main():
                         help='filename of Broden dataset')
     parser.add_argument('--layers', type=strpair, nargs='+',
                         help='space-separated list of layer names to dissect')
+    parser.add_argument('--meta', type=str, nargs='+',
+                        help='filenames of metadata json files')
     parser.add_argument('--netname', type=str, default=None,
                         help='name for network in generated reports')
     parser.add_argument('--imgsize', type=intpair, default=(227, 227),
@@ -79,7 +81,7 @@ def main():
         args.add_scale_offset = ('Alex' in model.__class__.__name__)
 
     # Load its state dict
-    meta = None
+    meta = {}
     if args.pthfile is None:
         print_progress('Dissecting model without pth file.')
     else:
@@ -91,6 +93,11 @@ def main():
                     meta[key] = data[key]
             data = data['state_dict']
         model.load_state_dict(data)
+
+    # Update any metadata from files, if any
+    for mfilename in args.meta:
+        with open(mfilename) as f:
+            meta.update(json.load(f))
 
     # Instrument it and prepare it for eval
     if not args.layers:
