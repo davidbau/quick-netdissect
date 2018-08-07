@@ -54,6 +54,8 @@ def main():
                         help='number of DataLoader workers')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA usage')
+    parser.add_argument('--add_scale_offset', action='store_true', default=None,
+                        help='offsets masks according to stride and padding')
     parser.add_argument('--quiet', action='store_true', default=False,
                         help='silences console output')
     args = parser.parse_args()
@@ -72,6 +74,9 @@ def main():
         print_progress('No model specified')
         sys.exit(1)
     model = eval_constructor(args.model)
+    # Default add_scale_offset only for AlexNet-looking models.
+    if args.add_scale_offset is None:
+        args.add_scale_offset = ('Alex' in model.__class__.__name__)
 
     # Load its state dict
     if args.pthfile is None:
@@ -86,7 +91,7 @@ def main():
     if not args.layers:
         print_progress('No layers specified')
         sys.exit(1)
-    retain_layers(model, args.layers)
+    retain_layers(model, args.layers, args.add_scale_offset)
     model.eval()
     if args.cuda:
         model.cuda()
