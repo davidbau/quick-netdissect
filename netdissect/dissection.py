@@ -50,6 +50,7 @@ def dissect(outdir, model, dataset,
         make_images=True,
         make_report=True,
         netname=None,
+        meta=None,
         ):
     '''
     Runs net dissection in-memory, using pytorch, and saves visualizations
@@ -88,12 +89,13 @@ def dissect(outdir, model, dataset,
                     for k in ics}
             generate_report(outdir, labelnames, catnames,
                     scores, lcs, ccs, ics, topk, levels, quantiles,
-                    quantile_threshold, iou_threshold, netname=netname)
+                    quantile_threshold, iou_threshold, netname=netname,
+                    meta=meta)
             return scores, topk, levels, quantiles
 
 def generate_report(outdir, labelnames, catnames, scores, lc, ccs, ics,
         topks, levels, quantiles, quantile_threshold, iou_threshold,
-        netname='Model'):
+        netname='Model', meta=None):
     '''
     Creates dissection.json reports and summary bargraph.svg files in the
     specified output directory, and copies a dissection.html interface
@@ -178,6 +180,7 @@ def generate_report(outdir, labelnames, catnames, scores, lc, ccs, ics,
         with open(os.path.join(outdir, safe_dir_name(layer), 'dissect.json'),
                 'w') as jsonfile:
             json.dump(dict(netname=netname,
+                meta=meta,
                 iou_threshold=iou_threshold,
                 layers=[record]), jsonfile, indent=1)
         # Copy the per-layer html
@@ -188,6 +191,7 @@ def generate_report(outdir, labelnames, catnames, scores, lc, ccs, ics,
     # Dump all-layer json in parent directory
     with open(os.path.join(outdir, 'dissect.json'), 'w') as jsonfile:
         json.dump(dict(netname=netname,
+            meta=meta,
             iou_threshold=iou_threshold,
             layers=all_layers), jsonfile, indent=1)
     # Copy the all-layer tml

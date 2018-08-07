@@ -123,6 +123,11 @@
     >{{lrec.layer}}</a>
 </li>
 </ul>
+<ul class="navbar-nav ml-auto" v-if="dissect.meta">
+  <li class="navbar-text ml-2" v-for="(v, k) in dissect.meta">
+    {{k}}={{v}}
+  </li>
+</ul>
 </nav>
 
 <div v-for="lrec in [dissect.layers[selected_layer]]">
@@ -209,9 +214,6 @@ $(document).on('click', '[data-toggle=lightbox]', function(event) {
     event.preventDefault();
     $('#lightbox').modal();
     $('#lightbox img').closest('div').scrollLeft(0);
-});
-$(document).on('keydown', function(event) {
-    $('#lightbox').modal('hide');
 });
 
 var theapp = new Vue({

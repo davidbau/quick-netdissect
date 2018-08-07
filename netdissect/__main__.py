@@ -1,4 +1,4 @@
-import torch, sys, os, argparse, textwrap
+import torch, sys, os, argparse, textwrap, numbers
 from torchvision import transforms
 from netdissect.progress import verbose_progress, print_progress
 from netdissect import retain_layers, BrodenDataset, dissect, ReverseNormalize
@@ -79,11 +79,16 @@ def main():
         args.add_scale_offset = ('Alex' in model.__class__.__name__)
 
     # Load its state dict
+    meta = None
     if args.pthfile is None:
         print_progress('Dissecting model without pth file.')
     else:
         data = torch.load(args.pthfile)
         if 'state_dict' in data:
+            meta = {}
+            for key in data:
+                if isinstance(data[key], numbers.Number):
+                    meta[key] = data[key]
             data = data['state_dict']
         model.load_state_dict(data)
 
@@ -122,6 +127,7 @@ def main():
             recover_image=ReverseNormalize(IMAGE_MEAN, IMAGE_STDEV),
             examples_per_unit=args.examples,
             netname=args.netname,
+            meta=meta,
             batch_size=args.batch_size,
             num_workers=args.num_workers)
 
