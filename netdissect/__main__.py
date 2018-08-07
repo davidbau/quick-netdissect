@@ -56,6 +56,8 @@ def main():
                         help='number of DataLoader workers')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA usage')
+    parser.add_argument('--perturbation', default=None,
+                        help='filename of perturbation attack to apply')
     parser.add_argument('--add_scale_offset', action='store_true', default=None,
                         help='offsets masks according to stride and padding')
     parser.add_argument('--quiet', action='store_true', default=False,
@@ -114,6 +116,9 @@ def main():
         print_progress('Writing output into %s.' % args.outdir)
     os.makedirs(args.outdir, exist_ok=True)
 
+    # Load perturbation
+    perturbation = numpy.load(args.perturbation) if args.perturbation else None
+
     # Load broden dataset
     brodendir = args.broden
     if brodendir is None:
@@ -125,6 +130,7 @@ def main():
     bds = BrodenDataset(brodendir,
             transform_image=transforms.Compose([
                 transforms.Resize(args.imgsize),
+                AddPerturbation(perturbation),
                 transforms.ToTensor(),
                 transforms.Normalize(IMAGE_MEAN, IMAGE_STDEV)]),
             size=args.size)
@@ -137,6 +143,25 @@ def main():
             meta=meta,
             batch_size=args.batch_size,
             num_workers=args.num_workers)
+
+class AddPerturbation(object):
+    def __init__(self, perturbation):
+        self.perturbation = perturbation
+
+    def __call__(self, pic):
+        if self.perturbation is None:
+            return pic
+        # Convert to a numpy float32 array
+        npyimg = numpy.array(pic, numpy.uint8, copy=False
+                ).astype(numpy.float32)
+        # Center the perturbation
+        oy, ox = ((self.perturbation.shape[d] - npyimg.shape[d]) // 2
+                for d in [0, 1])
+        npyimg += self.perturbation[
+                oy:oy+npyimg.shape[0], ox:ox+npyimg.shape[1]]
+        # Pytorch conventions: as a float it should be [0..1]
+        npyimg.clip(0, 255, npyimg)
+        return npyimg / 255.0
 
 def test_dissection():
     verbose_progress(True)
