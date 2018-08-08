@@ -1,8 +1,9 @@
-import os, errno, numpy, torch, csv, re
+import os, errno, numpy, torch, csv, re, shutil, os, zipfile
 from collections import OrderedDict
 from torchvision.datasets.folder import default_loader
 from torchvision import transforms
 from scipy import ndimage
+from urllib.request import urlopen
 
 class BrodenDataset(torch.utils.data.Dataset):
     '''
@@ -13,18 +14,25 @@ class BrodenDataset(torch.utils.data.Dataset):
     (2) The multicategory segmentation
     (3) A bincount of pixels in the segmentation
     '''
-    def __init__(self, directory, split='train', categories=None,
-            transform_image=None, transform_segment=None, size=None,
-            include_bincount=True, max_segment_depth=6):
+    def __init__(self, directory='dataset/broden', resolution=384,
+            split='train', categories=None,
+            transform_image=None, transform_segment=None,
+            download=False, size=None, include_bincount=True,
+            max_segment_depth=6):
+        assert resolution in [224, 227, 384]
+        if download:
+            ensure_broden_downloaded(directory, resolution)
         self.directory = directory
+        self.resolution = resolution
+        self.resdir = os.path.join(directory, 'broden1_%d' % resolution)
         self.loader = default_loader
         self.transform_image = transform_image
         self.transform_segment = transform_segment
         self.include_bincount = include_bincount
         # The maximum number of multilabel layers that coexist at an image.
         self.max_segment_depth = max_segment_depth
-        with open(os.path.join(directory, 'category.csv'), encoding='utf-8'
-                ) as f:
+        with open(os.path.join(self.resdir, 'category.csv'),
+                encoding='utf-8') as f:
             self.category = OrderedDict()
             for row in csv.DictReader(f):
                 self.category[row['name']] = row
@@ -37,13 +45,15 @@ class BrodenDataset(torch.utils.data.Dataset):
         else:
             categories = self.category.keys()
         # Filter out unneeded images.
-        with open(os.path.join(directory, 'index.csv'), encoding='utf-8') as f:
+        with open(os.path.join(self.resdir, 'index.csv'),
+                encoding='utf-8') as f:
             all_images = [decode_index_dict(r) for r in csv.DictReader(f)]
         self.image = [row for row in all_images
             if index_has_any_data(row, categories) and row['split'] == split]
         if size is not None:
             self.image = self.image[:size]
-        with open(os.path.join(directory, 'label.csv'), encoding='utf-8') as f:
+        with open(os.path.join(self.resdir, 'label.csv'),
+                encoding='utf-8') as f:
             self.label = build_dense_label_array([
                 decode_label_dict(r) for r in csv.DictReader(f)])
         # Build dense remapping arrays for labels, so that you can
@@ -52,7 +62,7 @@ class BrodenDataset(torch.utils.data.Dataset):
         self.category_unmap = {}
         self.category_label = {}
         for cat in self.category:
-            with open(os.path.join(directory, 'c_%s.csv' % cat),
+            with open(os.path.join(self.resdir, 'c_%s.csv' % cat),
                     encoding='utf-8') as f:
                 c_data = [decode_label_dict(r) for r in csv.DictReader(f)]
             self.category_unmap[cat], self.category_map[cat] = (
@@ -82,7 +92,7 @@ class BrodenDataset(torch.utils.data.Dataset):
         #    'object': [], 'part': [],
         #    'material': ['opensurfaces/25605_material.png'],
         #    'scene': [], 'texture': []}
-        image = self.loader(os.path.join(self.directory, 'images',
+        image = self.loader(os.path.join(self.resdir, 'images',
             record['image']))
         segment = numpy.zeros(shape=(self.max_segment_depth,
             record['sh'], record['sw']), dtype=int)
@@ -97,7 +107,7 @@ class BrodenDataset(torch.utils.data.Dataset):
                         bincount[layer] += segment.shape[1] * segment.shape[2]
                 else:
                     png = numpy.asarray(self.loader(os.path.join(
-                        self.directory, 'images', layer)))
+                        self.resdir, 'images', layer)))
                     segment[depth,:,:] = png[:,:,0] + png[:,:,1] * 256
                     if self.include_bincount:
                         bincount += numpy.bincount(segment[depth,:,:].flatten(),
@@ -207,11 +217,32 @@ def scatter_batch(seg, num_labels, omit_zero=True, dtype=torch.uint8):
         result[:,0] = 0
     return result
 
+def ensure_broden_downloaded(directory, resolution):
+    assert resolution in [224, 227, 384]
+    baseurl = 'http://netdissect.csail.mit.edu/data/'
+    dirname = 'broden1_%d' % resolution
+    if os.path.isfile(os.path.join(directory, dirname, 'index.csv')):
+        return # Already downloaded
+    zipfilename = 'broden1_%d.zip' % resolution
+    download_dir = os.path.join(directory, 'download')
+    os.makedirs(download_dir, exist_ok=True)
+    full_zipfilename = os.path.join(download_dir, zipfilename)
+    if not os.path.exists(full_zipfilename):
+        url = '%s/%s' % (baseurl, zipfilename)
+        print('Downloading %s' % url)
+        data = urlopen(url)
+        with open(full_zipfilename, 'wb') as f:
+            f.write(data.read())
+    print('Unzipping %s' % zipfilename)
+    with zipfile.ZipFile(full_zipfilename, 'r') as zip_ref:
+        zip_ref.extractall(directory)
+    assert os.path.isfile(os.path.join(directory, dirname, 'index.csv'))
+
 def test_broden_dataset():
     '''
     Testing code.
     '''
-    bds = BrodenDataset('dataset/broden1_384',
+    bds = BrodenDataset('dataset/broden', resolution=384,
             transform_image=transforms.Compose([
                         transforms.Resize(224),
                         transforms.ToTensor()]),

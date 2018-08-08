@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Another way to download the dataset.
+
 set -e
 
 # Start from parent directory of script

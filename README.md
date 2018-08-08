@@ -11,8 +11,10 @@ idioms: it depends on python 3 and pytorch 4.1.
 
 ## Setup
 
-Depends on having the Broden dataset available.  Run
-`script/dlbroden.sh` to download it into the `dataset/` directory.
+Depends on having the Broden dataset available.  Use the `download=True`
+flag on the BrodenDataset constructor, or run
+ `python -m netdissect --download` to download it into the
+`dataset/broden` directory.
 
 Also, if `conda` is available, `script/setup_p3t41.sh` will create an
 Anaconda environment with python 3 and a current build of pytorch 4.1.
@@ -76,14 +78,25 @@ optional arguments:
   --model MODEL         constructor for the model to test
   --pthfile PTHFILE     filename of .pth file for the model
   --outdir OUTDIR       directory for dissection output
-  --broden BRODEN       filename of Broden dataset
   --layers LAYERS [LAYERS ...]
-                        list of layer names to dissect
-  --netname NETNAME     name for network in generated reports
+                        space-separated list of layer names to dissect, in the
+                        form layername[:reportedname]
+  --broden BRODEN       directory containing Broden dataset
+  --download            downloads Broden dataset if needed
   --imgsize IMGSIZE     input image size to use
+  --netname NETNAME     name for network in generated reports
+  --meta META [META ...]
+                        json files of metadata to add to report
   --examples EXAMPLES   number of image examples per unit
   --size SIZE           dataset subset size to use
+  --batch_size BATCH_SIZE
+                        batch size for forward pass
+  --num_workers NUM_WORKERS
+                        number of DataLoader workers
   --no-cuda             disables CUDA usage
+  --perturbation PERTURBATION
+                        filename of perturbation attack to apply
+  --add_scale_offset    offsets masks according to stride and padding
   --quiet               silences console output
 ```
 

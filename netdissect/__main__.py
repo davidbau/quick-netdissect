@@ -30,22 +30,25 @@ def main():
             prog='python -m netdissect',
             epilog=textwrap.dedent(help_epilog),
             formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--model', type=str, default=None, required=True,
+    parser.add_argument('--model', type=str, default=None,
                         help='constructor for the model to test')
     parser.add_argument('--pthfile', type=str, default=None,
                         help='filename of .pth file for the model')
     parser.add_argument('--outdir', type=str, default='dissect',
                         help='directory for dissection output')
-    parser.add_argument('--broden', type=str, default=None,
-                        help='filename of Broden dataset')
     parser.add_argument('--layers', type=strpair, nargs='+',
-                        help='space-separated list of layer names to dissect')
-    parser.add_argument('--meta', type=str, nargs='+',
-                        help='filenames of metadata json files')
-    parser.add_argument('--netname', type=str, default=None,
-                        help='name for network in generated reports')
+                        help='space-separated list of layer names to dissect' + 
+                        ', in the form layername[:reportedname]')
+    parser.add_argument('--broden', type=str, default='dataset/broden',
+                        help='directory containing Broden dataset')
+    parser.add_argument('--download', action='store_true', default=False,
+                        help='downloads Broden dataset if needed')
     parser.add_argument('--imgsize', type=intpair, default=(227, 227),
                         help='input image size to use')
+    parser.add_argument('--netname', type=str, default=None,
+                        help='name for network in generated reports')
+    parser.add_argument('--meta', type=str, nargs='+',
+                        help='json files of metadata to add to report')
     parser.add_argument('--examples', type=int, default=20,
                         help='number of image examples per unit')
     parser.add_argument('--size', type=int, default=10000,
@@ -65,13 +68,18 @@ def main():
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
 
-    # default='torchvision.models.alexnet(pretrained=True)'
-
     # Set up console output
     verbose_progress(not args.quiet)
 
     # Speed up pytorch
     torch.backends.cudnn.benchmark = True
+
+    # Special case: download flag without model to test.
+    if args.model is None and args.download:
+        from netdissect.broden import ensure_broden_downloaded
+        for resolution in [224, 227, 384]:
+            ensure_broden_downloaded(args.broden, resolution)
+        sys.exit(0)
 
     # Construct the network
     if args.model is None:
@@ -97,9 +105,10 @@ def main():
         model.load_state_dict(data)
 
     # Update any metadata from files, if any
-    for mfilename in args.meta:
-        with open(mfilename) as f:
-            meta.update(json.load(f))
+    if args.meta:
+        for mfilename in args.meta:
+            with open(mfilename) as f:
+                meta.update(json.load(f))
 
     # Instrument it and prepare it for eval
     if not args.layers:
@@ -120,14 +129,17 @@ def main():
     perturbation = numpy.load(args.perturbation) if args.perturbation else None
 
     # Load broden dataset
-    brodendir = args.broden
-    if brodendir is None:
-        ds_resolution = (224 if max(args.imgsize) <= 224 else
-                         227 if max(args.imgsize) <= 227 else 384)
-        brodendir = os.path.join('dataset', 'broden1_%d' % ds_resolution)
-        # TODO: autodownload perhaps.
-        print_progress('Loading broden from %s' % brodendir)
-    bds = BrodenDataset(brodendir,
+    ds_resolution = (224 if max(args.imgsize) <= 224 else
+                     227 if max(args.imgsize) <= 227 else 384)
+    if not args.download and not os.path.isfile(os.path.join(args.broden,
+        'broden1_%d' % (ds_resolution), 'index.csv')):
+        print_progress('Broden at resolution %d not found in %s.' %
+                (ds_resolution, args.broden))
+        print_progress('Add --download to download the dataset.')
+        sys.exit(1)
+
+    bds = BrodenDataset(args.broden,
+            resolution=ds_resolution, download=args.download,
             transform_image=transforms.Compose([
                 transforms.Resize(args.imgsize),
                 AddPerturbation(perturbation),
