@@ -18,13 +18,14 @@ class BrodenDataset(torch.utils.data.Dataset):
             split='train', categories=None,
             transform_image=None, transform_segment=None,
             download=False, size=None, include_bincount=True,
-            max_segment_depth=6):
+            broden_version=1, max_segment_depth=6):
         assert resolution in [224, 227, 384]
         if download:
-            ensure_broden_downloaded(directory, resolution)
+            ensure_broden_downloaded(directory, resolution, broden_version)
         self.directory = directory
         self.resolution = resolution
-        self.resdir = os.path.join(directory, 'broden1_%d' % resolution)
+        self.resdir = os.path.join(directory, 'broden%d_%d' %
+                (broden_version, resolution))
         self.loader = default_loader
         self.transform_image = transform_image
         self.transform_segment = transform_segment
@@ -217,10 +218,10 @@ def scatter_batch(seg, num_labels, omit_zero=True, dtype=torch.uint8):
         result[:,0] = 0
     return result
 
-def ensure_broden_downloaded(directory, resolution):
+def ensure_broden_downloaded(directory, resolution, broden_version=1):
     assert resolution in [224, 227, 384]
     baseurl = 'http://netdissect.csail.mit.edu/data/'
-    dirname = 'broden1_%d' % resolution
+    dirname = 'broden%d_%d' % (broden_version, resolution)
     if os.path.isfile(os.path.join(directory, dirname, 'index.csv')):
         return # Already downloaded
     zipfilename = 'broden1_%d.zip' % resolution

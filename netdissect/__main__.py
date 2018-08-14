@@ -53,6 +53,8 @@ def main():
                         help='number of image examples per unit')
     parser.add_argument('--size', type=int, default=10000,
                         help='dataset subset size to use')
+    parser.add_argument('--broden_version', type=int, default=1,
+                        help='broden version number')
     parser.add_argument('--batch_size', type=int, default=100,
                         help='batch size for forward pass')
     parser.add_argument('--num_workers', type=int, default=24,
@@ -78,7 +80,8 @@ def main():
     if args.model is None and args.download:
         from netdissect.broden import ensure_broden_downloaded
         for resolution in [224, 227, 384]:
-            ensure_broden_downloaded(args.broden, resolution)
+            ensure_broden_downloaded(args.broden, resolution,
+                    args.broden_version)
         sys.exit(0)
 
     # Construct the network
@@ -132,14 +135,15 @@ def main():
     ds_resolution = (224 if max(args.imgsize) <= 224 else
                      227 if max(args.imgsize) <= 227 else 384)
     if not args.download and not os.path.isfile(os.path.join(args.broden,
-        'broden1_%d' % (ds_resolution), 'index.csv')):
-        print_progress('Broden at resolution %d not found in %s.' %
-                (ds_resolution, args.broden))
+        'broden%d_%d' % (args.broden_version, ds_resolution), 'index.csv')):
+        print_progress('Broden%d at resolution %d not found in %s.' %
+                (args.broden_version, ds_resolution, args.broden))
         print_progress('Add --download to download the dataset.')
         sys.exit(1)
 
     bds = BrodenDataset(args.broden,
             resolution=ds_resolution, download=args.download,
+            broden_version=args.broden_version,
             transform_image=transforms.Compose([
                 transforms.Resize(args.imgsize),
                 AddPerturbation(perturbation),
@@ -189,7 +193,7 @@ def test_dissection():
         ('features.8', 'conv4'),
         ('features.10', 'conv5') ])
     # load broden dataset
-    bds = BrodenDataset('dataset/broden1_227',
+    bds = BrodenDataset('dataset/broden',
             transform_image=transforms.Compose([
                 transforms.ToTensor(),
                 transforms.Normalize(IMAGE_MEAN, IMAGE_STDEV)]),
