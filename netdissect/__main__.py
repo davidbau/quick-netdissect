@@ -63,6 +63,8 @@ def main():
                         help='disables labeling of units')
     parser.add_argument('--no-images', action='store_true', default=False,
                         help='disables generation of unit images')
+    parser.add_argument('--single-images', action='store_true', default=False,
+                        help='generates single images also')
     parser.add_argument('--no-report', action='store_true', default=False,
                         help='disables generation report summary')
     parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -172,6 +174,7 @@ def main():
             make_images=args.images,
             make_labels=args.labels,
             make_report=args.report,
+            make_single_images=args.single_images,
             batch_size=args.batch_size,
             num_workers=args.num_workers)
 

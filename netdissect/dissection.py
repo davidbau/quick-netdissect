@@ -50,6 +50,7 @@ def dissect(outdir, model, dataset,
         make_images=True,
         make_labels=True,
         make_report=True,
+        make_single_images=False,
         netname=None,
         meta=None,
         ):
@@ -73,6 +74,7 @@ def dissect(outdir, model, dataset,
         if make_images:
             generate_images(outdir, model, dataset, topk, levels, recover_image,
                     row_length=examples_per_unit, batch_size=batch_size,
+                    single_images=make_single_images,
                     num_workers=num_workers)
         if make_labels:
             if hasattr(recover_image, 'get_label_and_category_names'):
@@ -236,8 +238,8 @@ def generate_report(outdir, quantiledata, labeldata=None,
 
 
 def generate_images(outdir, model, dataset, topk, levels,
-        recover_image=None, row_length=None, gap_pixels=5, batch_size=100,
-        num_workers=24):
+        recover_image=None, row_length=None, gap_pixels=5,
+        single_images=False, batch_size=100, num_workers=24):
     '''
     Creates an image strip file for every unit of every retained layer
     of the model, in the format [outdir]/[layername]/[unitnum]-top.jpg.
@@ -317,6 +319,11 @@ def generate_images(outdir, model, dataset, topk, levels,
                 filename = os.path.join(outdir, safe_dir_name(layer),
                         'image', '%d-%s.jpg' % (unit, suffix))
                 Image.fromarray(strip[:,:-gap_pixels,:]).save(filename)
+                if single_images:
+                    single_filename = os.path.join(outdir, safe_dir_name(layer),
+                        'image', 's-%d-%s.jpg' % (unit, suffix))
+                    Image.fromarray(strip[:,:strip.shape[1] // row_length
+                        - gap_pixels,:]).save(single_filename)
 
 def score_tally_stats(primary_category, lc, cc, ic):
     ec = cc[primary_category]
