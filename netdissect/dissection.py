@@ -194,7 +194,7 @@ def generate_report(outdir, quantiledata, labeldata=None,
                             -len(labelunits[l]),              # label freq
                             -max([units[u]['iou'] for u in labelunits[l]],
                                 default=0) # score
-                            )))]
+                            ))) if len(labelunits[label])]
             # Total number of interpretable units.
             record['interpretable'] = sum(len(group)
                     for group in record['labels'])
