@@ -131,43 +131,49 @@
 </nav>
 
 <div v-for="lrec in [dissect.layers[selected_layer]]">
-<div class="histogram">
+<div v-if="'bargraph' in lrec" class="histogram">
 <a data-toggle="lightbox" :href="lrec.dirname + '/bargraph.svg?'+Math.random()"
    :data-title="'Summary of ' + (dissect.netname || 'labels')
           + ' at ' + lrec.layer">
-<img class="img-fluid" :src="lrec.dirname + '/bargraph.svg?'+Math.random()">
+<img class="img-fluid"
+   :src="lrec.dirname + '/' + lrec.bargraph + '?'+Math.random()">
 </a>
 </div>
 
 <div class="gridheader">
 <div class="layerinfo">
-{{_.sum(_.map(lrec.labels,
-    function(x){return x.units.length;})) }}/{{lrec.units.length}} units
+<span v-if="'interpretable' in lrec"
+>{{lrec.interpretable}}/</span
+>{{lrec.units.length}} units
+<span v-if="'labels' in lrec">
 covering {{lrec.labels.length}} concepts
 with IoU &ge; {{dissect.iou_threshold}}
+</span>
 </div>
 
 <div class="sortheader">
 sort by
-<span :class="{sortby: true, currentsort: sort_order == 'label'}"
-        v-on:click="sort_order = 'label'">label</span>
-<span :class="{sortby: true, currentsort: sort_order == 'score'}"
-        v-on:click="sort_order = 'score'">score</span>
-<span :class="{sortby: true, currentsort: sort_order == 'unit'}"
-        v-on:click="sort_order = 'unit'">unit</span>
+<span v-for="rank in lrec['rankings']">
+<span :class="{sortby: true, currentsort: sort_order == rank.name}"
+      :data-ranking="rank.name"
+      v-on:click="sort_order = $event.currentTarget.dataset.ranking"
+      >{{rank.name}}</span>
+<span> </span>
+</span>
 </div>
 
 </div>
 <div class="unitgrid"
 ><div :class="{unit: true, lowscore: !urec.interp}"
-        v-for="urec in _.orderBy(lrec.units,
-            sort_fields[sort_order][0], sort_fields[sort_order][1])">
-<div class="unitlabel">{{urec.label}}</div>
+      v-for="urec in _.find(lrec.rankings, x=>x.name == sort_order)
+                      .ranking.map(x=>lrec.units[x])">
+<div v-if="'label' in urec" class="unitlabel">{{urec.label}}</div>
 <div class="info"
  ><span class="layername">{{lrec.layer}}</span
  > <span class="unitnum">unit {{urec.unit}}</span
- > <span class="category">({{urec.cat}})</span
- > <span class="iou">IoU {{urec.iou | fixed(2)}}</span></div>
+ > <span v-if="'cat' in urec" class="category">({{urec.cat}})</span
+ > <span v-if="'iou' in urec" class="iou"
+         >IoU {{urec.iou | fixed(2)}}</span></div>
 <div class="thumbcrop"
 ><a data-toggle="lightbox"
  :href="lrec.dirname + '/image/' + urec.unit + '-top.jpg'"
@@ -219,7 +225,7 @@ $(document).on('click', '[data-toggle=lightbox]', function(event) {
 var theapp = new Vue({
   el: '#app',
   data: {
-    sort_order: 'label',
+    sort_order: 'unit',
     sort_fields: {
       label: [[], []],
       score: [['iou'], ['desc']],
@@ -232,6 +238,7 @@ var theapp = new Vue({
     var self = this;
     $.getJSON('dissect.json?' + Math.random(), function(d) {
       self.dissect = d;
+      self.sort_order = d.default_ranking;
       self.hashchange();
     });
     $(window).on('hashchange', function() { self.hashchange(); });

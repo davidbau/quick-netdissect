@@ -34,7 +34,7 @@ Example:
 import torch, numpy, os, re, json, shutil
 from PIL import Image
 from xml.etree import ElementTree as et
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from .progress import verbose_progress, default_progress, print_progress
 from .runningstats import RunningQuantile, RunningTopK
 from .sampler import FixedSubsetSampler
@@ -48,6 +48,7 @@ def dissect(outdir, model, dataset,
         batch_size=100,
         num_workers=24,
         make_images=True,
+        make_labels=True,
         make_report=True,
         netname=None,
         meta=None,
@@ -68,11 +69,12 @@ def dissect(outdir, model, dataset,
                 recover_image=recover_image, k=examples_per_unit)
         levels = {k: qc.quantiles([1.0 - quantile_threshold])[:,0]
                 for k, qc in quantiles.items()}
+        quantiledata = (topk, quantiles, levels, quantile_threshold)
         if make_images:
             generate_images(outdir, model, dataset, topk, levels, recover_image,
                     row_length=examples_per_unit, batch_size=batch_size,
                     num_workers=num_workers)
-        if make_report:
+        if make_labels:
             if hasattr(recover_image, 'get_label_and_category_names'):
                 labelnames, catnames = (
                         recover_image.get_label_and_category_names(dataset))
@@ -87,102 +89,138 @@ def dissect(outdir, model, dataset,
             scores = {
                     k: score_tally_stats(primary_category, lcs, ccs[k], ics[k])
                     for k in ics}
-            generate_report(outdir, labelnames, catnames,
-                    scores, lcs, ccs, ics, topk, levels, quantiles,
-                    quantile_threshold, iou_threshold, netname=netname,
+            labeldata = (labelnames, catnames, scores, lcs, ccs, ics,
+                    iou_threshold)
+        else:
+            labeldata = None
+        if make_report:
+            generate_report(outdir,
+                    quantiledata=quantiledata,
+                    labeldata=labeldata,
+                    netname=netname,
                     meta=meta)
-            return scores, topk, levels, quantiles
+        return quantiledata, labeldata
 
-def generate_report(outdir, labelnames, catnames, scores, lc, ccs, ics,
-        topks, levels, quantiles, quantile_threshold, iou_threshold,
+def generate_report(outdir, quantiledata, labeldata=None,
         netname='Model', meta=None):
     '''
     Creates dissection.json reports and summary bargraph.svg files in the
     specified output directory, and copies a dissection.html interface
     to go along with it.
     '''
-    catorder = {'object': -6, 'scene': -5, 'part': -4,
-                'material': -3, 'texture': -2, 'color': -1}
-    catnumber = {n: i for i, n in enumerate(catnames)}
     all_layers = []
     # Current source code directory, for html to copy.
     srcdir = os.path.realpath(
        os.path.join(os.getcwd(), os.path.dirname(__file__)))
-    for layer in ics.keys():
-        score, cc, ic, topk, lev, quant = [dat[layer]
-                for dat in [scores, ccs, ics, topks, levels, quantiles]]
-        topa, topi = topk.result()
-        best_score, best_label = score.max(0)
-        record = dict(layer=layer)
-        unit = []
-        labelunits = {}
-        # Record score information for each unit.
-        for u, (score, label) in enumerate(zip(best_score, best_label)):
-            unit.append(dict(
+    # Unpack arguments
+    topk, quantiles, levels, quantile_threshold = quantiledata
+    top_record = dict(
+            netname=netname,
+            meta=meta,
+            default_ranking='unit',
+            quantile_threshold=quantile_threshold)
+    if labeldata is not None:
+        labelnames, catnames, scores, lcs, ccs, ics, iou_threshold = labeldata
+        catorder = {'object': -6, 'scene': -5, 'part': -4,
+                    'material': -3, 'texture': -2, 'color': -1}
+        catnumber = {n: i for i, n in enumerate(catnames)}
+        top_record['default_ranking'] = 'label'
+        top_record['iou_threshold'] = iou_threshold
+    for layer in topk.keys():
+        units, rankings = [], []
+        record = dict(layer=layer, units=units, rankings=rankings)
+        # For every unit, we always have basic visualization information.
+        topa, topi = topk[layer].result()
+        lev = levels[layer]
+        for u in range(len(topa)):
+            units.append(dict(
                 unit=u,
-                iou=score.item(),
-                lc=lc[label].item(),
-                cc=cc[catnumber[labelnames[label][1]], u].item(),
-                ic=ic[label, u].item(),
-                interp=(score.item() > iou_threshold),
-                labelnum=label.item(),
-                label=labelnames[label.item()][0],
-                cat=labelnames[label.item()][1],
+                interp=True,
                 level=lev[u].item(),
                 top=[dict(imgnum=i.item(), maxact=a.item())
-                    for i, a in zip(topi[u], topa[u])]
+                    for i, a in zip(topi[u], topa[u])],
                 ))
-            if score.item() > iou_threshold:
-                if label.item() not in labelunits:
-                    labelunits[label.item()] = []
-                labelunits[label.item()].append(u)
-        # Sort all units in order with most popular label first.
-        record['units'] = list(sorted(unit,
-            # Sort by:
-            key=lambda r: (-1 if r['interp'] else 0,     # interpretable first
-                -len(labelunits.get(r['labelnum'], [])), # label freq, score
-                -max(unit[u]['iou'] for u in labelunits[r['labelnum']])
-                   if r['labelnum'] in labelunits else 0,
-                r['labelnum'],                           # label
-                -r['iou'])))                             # unit score
+        rankings.append(dict(name="unit", ranking=list(range(len(topa)))))
+        # TODO: consider including stats and ranking based on quantiles,
+        # variance, connectedness here.
 
-        # Collate labels by category then frequency.
-        record['labels'] = [dict(
-                    label=labelnames[label][0],
-                    labelnum=label,
-                    units=labelunits[label],
-                    cat=labelnames[label][1])
-                for label in (sorted(labelunits.keys(),
-                    # Sort by:
-                    key=lambda l: (catorder.get(          # category
-                        labelnames[l][1], 0),
-                        -len(labelunits[l]),              # label freq
-                        -max(unit[u]['iou'] for u in labelunits[l]) # score
-                        )))]
-        record['interpretable'] = sum(len(group) for group in record['labels'])
-        # Make a bargraph of labels
-        os.makedirs(os.path.join(outdir, safe_dir_name(layer)), exist_ok=True)
-        catgroups = OrderedDict()
-        for _, cat in sorted([(v, k) for k, v in catorder.items()]):
-            catgroups[cat] = []
-        for rec in record['labels']:
-            if rec['cat'] not in catgroups:
-                catgroups[rec['cat']] = []
-            catgroups[rec['cat']].append(rec['label'])
-        make_svg_bargraph(
-                [rec['label'] for rec in record['labels']],
-                [len(rec['units']) for rec in record['labels']],
-                [(cat, len(group)) for cat, group in catgroups.items()],
-                filename=os.path.join(outdir, safe_dir_name(layer),
-                    'bargraph.svg'))
+        # if we have labeldata, then every unit also gets a bunch of other info
+        if labeldata is not None:
+            labelunits = defaultdict(list)
+            lscore, cc, ic = [dat[layer] for dat in [scores, ccs, ics]]
+            best_score, best_label = lscore.max(0)
+            record['iou_threshold'] = iou_threshold,
+            for u, urec in enumerate(units):
+                score, label = best_score[u], best_label[u]
+                urec.update(dict(
+                    iou=score.item(),
+                    lc=lcs[label].item(),
+                    cc=cc[catnumber[labelnames[label][1]], u].item(),
+                    ic=ic[label, u].item(),
+                    interp=(score.item() > iou_threshold),
+                    labelnum=label.item(),
+                    label=labelnames[label.item()][0],
+                    cat=labelnames[label.item()][1],
+                    ))
+                if score.item() > iou_threshold:
+                    labelunits[label.item()].append(u)
+            # Sort all units in order with most popular label first.
+            label_ordering = sorted(units,
+                # Sort by:
+                key=lambda r: (-1 if r['interp'] else 0,  # interpretable
+                    -len(labelunits[r['labelnum']]),      # label freq, score
+                    -max([units[u]['iou'] for u in labelunits[r['labelnum']]],
+                        default=0),
+                    r['labelnum'],                        # label
+                    -r['iou']))                           # unit score
+            # Add label and iou ranking.
+            rankings.append(dict(name="label", ranking=list(
+                ur['unit'] for ur in label_ordering)))
+            rankings.append(dict(name="iou", ranking=list(
+                ur['unit'] for ur in sorted(units, key=lambda x: -x['iou']))))
+
+            # Collate labels by category then frequency.
+            record['labels'] = [dict(
+                        label=labelnames[label][0],
+                        labelnum=label,
+                        units=labelunits[label],
+                        cat=labelnames[label][1])
+                    for label in (sorted(labelunits.keys(),
+                        # Sort by:
+                        key=lambda l: (catorder.get(          # category
+                            labelnames[l][1], 0),
+                            -len(labelunits[l]),              # label freq
+                            -max([units[u]['iou'] for u in labelunits[l]],
+                                default=0) # score
+                            )))]
+            # Total number of interpretable units.
+            record['interpretable'] = sum(len(group)
+                    for group in record['labels'])
+            # Make a bargraph of labels
+            os.makedirs(os.path.join(outdir, safe_dir_name(layer)),
+                    exist_ok=True)
+            catgroups = OrderedDict()
+            for _, cat in sorted([(v, k) for k, v in catorder.items()]):
+                catgroups[cat] = []
+            for rec in record['labels']:
+                if rec['cat'] not in catgroups:
+                    catgroups[rec['cat']] = []
+                catgroups[rec['cat']].append(rec['label'])
+            make_svg_bargraph(
+                    [rec['label'] for rec in record['labels']],
+                    [len(rec['units']) for rec in record['labels']],
+                    [(cat, len(group)) for cat, group in catgroups.items()],
+                    filename=os.path.join(outdir, safe_dir_name(layer),
+                        'bargraph.svg'))
+            # Only show the bargraph if it is non-empty.
+            if len(record['labels']):
+                record['bargraph'] = 'bargraph.svg'
         # Dump per-layer json inside per-layer directory
         record['dirname'] = '.'
         with open(os.path.join(outdir, safe_dir_name(layer), 'dissect.json'),
                 'w') as jsonfile:
-            json.dump(dict(netname=netname,
-                meta=meta,
-                iou_threshold=iou_threshold,
-                layers=[record]), jsonfile, indent=1)
+            top_record['layers'] = [record]
+            json.dump(top_record, jsonfile, indent=1)
         # Copy the per-layer html
         shutil.copy(os.path.join(srcdir, 'dissect.html'),
                 os.path.join(outdir, safe_dir_name(layer), 'dissect.html'))
@@ -190,11 +228,9 @@ def generate_report(outdir, labelnames, catnames, scores, lc, ccs, ics,
         all_layers.append(record)
     # Dump all-layer json in parent directory
     with open(os.path.join(outdir, 'dissect.json'), 'w') as jsonfile:
-        json.dump(dict(netname=netname,
-            meta=meta,
-            iou_threshold=iou_threshold,
-            layers=all_layers), jsonfile, indent=1)
-    # Copy the all-layer tml
+        top_record['layers'] = all_layers
+        json.dump(top_record, jsonfile, indent=1)
+    # Copy the all-layer html
     shutil.copy(os.path.join(srcdir, 'dissect.html'),
             os.path.join(outdir, 'dissect.html'))
 
@@ -541,7 +577,7 @@ def make_svg_bargraph(labels, heights, categories,
         barheight=100, barwidth=12, show_labels=True, filename=None):
     # if len(labels) == 0:
     #     return # Nothing to do
-    unitheight = float(barheight) / max(heights, default=1)
+    unitheight = float(barheight) / max(max(heights, default=1), 1)
     textheight = barheight if show_labels else 0
     labelsize = float(barwidth)
     gap = float(barwidth) / 4

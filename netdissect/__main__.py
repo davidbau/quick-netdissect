@@ -59,6 +59,12 @@ def main():
                         help='batch size for forward pass')
     parser.add_argument('--num_workers', type=int, default=24,
                         help='number of DataLoader workers')
+    parser.add_argument('--no-labels', action='store_true', default=False,
+                        help='disables labeling of units')
+    parser.add_argument('--no-images', action='store_true', default=False,
+                        help='disables generation of unit images')
+    parser.add_argument('--no-report', action='store_true', default=False,
+                        help='disables generation report summary')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA usage')
     parser.add_argument('--perturbation', default=None,
@@ -67,8 +73,14 @@ def main():
                         help='offsets masks according to stride and padding')
     parser.add_argument('--quiet', action='store_true', default=False,
                         help='silences console output')
+    if len(sys.argv) == 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
+    args.images = not args.no_images
+    args.report = not args.no_report
+    args.labels = not args.no_labels
 
     # Set up console output
     verbose_progress(not args.quiet)
@@ -157,6 +169,9 @@ def main():
             examples_per_unit=args.examples,
             netname=args.netname,
             meta=meta,
+            make_images=args.images,
+            make_labels=args.labels,
+            make_report=args.report,
             batch_size=args.batch_size,
             num_workers=args.num_workers)
 
