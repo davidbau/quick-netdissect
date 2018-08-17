@@ -79,7 +79,6 @@ def main():
         parser.print_help(sys.stderr)
         sys.exit(1)
     args = parser.parse_args()
-    args.cuda = not args.no_cuda and torch.cuda.is_available()
     args.images = not args.no_images
     args.report = not args.no_report
     args.labels = not args.no_labels
@@ -109,6 +108,12 @@ def main():
     if args.model is None:
         print_progress('No model specified')
         sys.exit(1)
+
+    # Set up CUDA
+    args.cuda = not args.no_cuda and torch.cuda.is_available()
+    if args.cuda:
+        torch.backends.cudnn.benchmark = True
+
     model = eval_constructor(args.model)
     # Default add_scale_offset only for AlexNet-looking models.
     if args.add_scale_offset is None:
