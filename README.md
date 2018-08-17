@@ -11,13 +11,23 @@ idioms: it depends on python 3 and pytorch 4.1.
 
 ## Setup
 
-Depends on having the Broden dataset available.  Use the `download=True`
-flag on the BrodenDataset constructor, or run
- `python -m netdissect --download` to download it into the
-`dataset/broden` directory.
+Run within a python 3.5+ environment.  If `conda` is available,
+`script/setup_p3t41.sh` will create an Anaconda environment with
+python 3 and a current build of pytorch 4.1.
 
-Also, if `conda` is available, `script/setup_p3t41.sh` will create an
-Anaconda environment with python 3 and a current build of pytorch 4.1.
+To install the netdissect library and command script:
+```
+pip install git:git://github.com/davidbau/quick-netdissect.git#egg=netdissect
+```
+
+Running dissections depends on having the Broden dataset available;
+the default location is `dataset/broden` (relative to the current working
+directory), which can be overriden using `--broden [DIR]` or the broden
+argument in the API.  You can download the dataset as follows:
+
+```
+netdissect --download
+```
 
 ## API
 
@@ -64,11 +74,14 @@ Example:
 Net dissect command-line utility.  Usage:
 
 ```
-python -m netdissect [-h] --model MODEL [--pthfile PTHFILE]
-                     [--outdir OUTDIR] [--broden BRODEN]
-                     [--layers LAYERS [LAYERS ...]] [--netname NETNAME]
-                     [--imgsize IMGSIZE] [--examples EXAMPLES]
-                     [--size SIZE] [--no-cuda] [--quiet]
+usage: netdissect [-h] [--model MODEL] [--pthfile PTHFILE] [--outdir OUTDIR]
+                  [--layers LAYERS [LAYERS ...]] [--broden BRODEN]
+                  [--download] [--imgsize IMGSIZE] [--netname NETNAME]
+                  [--meta META [META ...]] [--examples EXAMPLES] [--size SIZE]
+                  [--batch_size BATCH_SIZE] [--num_workers NUM_WORKERS]
+                  [--no-labels] [--no-images] [--single-images] [--no-report]
+                  [--no-cuda] [--perturbation PERTURBATION]
+                  [--add_scale_offset] [--quiet]
 ```
 
 optional arguments:
@@ -93,6 +106,10 @@ optional arguments:
                         batch size for forward pass
   --num_workers NUM_WORKERS
                         number of DataLoader workers
+  --no-labels           disables labeling of units
+  --no-images           disables generation of unit images
+  --single-images       generates single images also
+  --no-report           disables generation report summary
   --no-cuda             disables CUDA usage
   --perturbation PERTURBATION
                         filename of perturbation attack to apply
@@ -103,7 +120,7 @@ optional arguments:
 Example: to dissect three layers of the pretrained alexnet in torchvision:
 
 ```
-python -m netdissect \
+netdissect \
         --model "torchvision.models.alexnet(pretrained=True)" \
         --layers features.6:conv3 features.8:conv4 features.10:conv5 \
         --imgsize 227 \
