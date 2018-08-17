@@ -12,7 +12,8 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/davidbau/quick-netdissect",
-    packages=setuptools.find_packages(),
+    packages=['netdissect'],
+    package_data={'netdissect': ['dissect.html']},
     classifiers=(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
@@ -27,7 +28,7 @@ setuptools.setup(
     python_requires=">=3.5.2",
     install_requires=[
         "numpy>=1.14.5",
-        "Pillow>=5.1.0",
+        "Pillow>=4.1.0",
         "scipy>=1.1.0",
         "torch>=0.4.1",
         "torchvision>=0.2.1",
