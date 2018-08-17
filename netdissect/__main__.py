@@ -6,7 +6,7 @@ from netdissect import retain_layers, BrodenDataset, dissect, ReverseNormalize
 help_epilog = '''\
 Example: to dissect three layers of the pretrained alexnet in torchvision:
 
-python -m netdissect \\
+netdissect \\
         --model "torchvision.models.alexnet(pretrained=True)" \\
         --layers features.6:conv3 features.8:conv4 features.10:conv5 \\
         --imgsize 227 \\
@@ -27,7 +27,7 @@ def main():
         return tuple(int(v) for v in p)
 
     parser = argparse.ArgumentParser(description='Net dissect utility',
-            prog='python -m netdissect',
+            prog='netdissect',
             epilog=textwrap.dedent(help_epilog),
             formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--model', type=str, default=None,
@@ -97,6 +97,13 @@ def main():
             ensure_broden_downloaded(args.broden, resolution,
                     args.broden_version)
         sys.exit(0)
+
+    # Help if broden is not present
+    if not os.path.isdir(args.broden):
+        print_progress('Broden dataset not found at %s.'  % args.broden)
+        print_progress('Specify dataset directory using --broden [DIR]')
+        print_progrees('To download, run: netdissect --download')
+        sys.exit(1)
 
     # Construct the network
     if args.model is None:

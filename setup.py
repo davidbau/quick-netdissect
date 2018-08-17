@@ -19,6 +19,11 @@ setuptools.setup(
         "Operating System :: OS Independent",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ),
+    entry_points={
+        'console_scripts': [
+            'netdissect=netdissect.__main__:main'
+        ]
+    },
     python_requires=">=3.5.2",
     install_requires=[
         "numpy>=1.14.5",
