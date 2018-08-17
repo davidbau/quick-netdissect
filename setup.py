@@ -19,4 +19,13 @@ setuptools.setup(
         "Operating System :: OS Independent",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ),
+    python_requires=">=3.5.2",
+    install_requires=[
+        "numpy>=1.14.5",
+        "Pillow>=5.1.0",
+        "scipy>=1.1.0",
+        "torch>=0.4.1",
+        "torchvision>=0.2.1",
+        "tqdm>=4.23.4",
+    ],
 )
