@@ -7,12 +7,19 @@ from urllib.request import urlopen
 
 class BrodenDataset(torch.utils.data.Dataset):
     '''
-    A multicategory segmentation data loader.
+    A multicategory segmentation data set.
 
     Returns three streams:
-    (1) The image
-    (2) The multicategory segmentation
-    (3) A bincount of pixels in the segmentation
+    (1) The image (3, h, w).
+    (2) The multicategory segmentation (labelcount, h, w).
+    (3) A bincount of pixels in the segmentation (labelcount).
+
+    Net dissect also assumes that the dataset object has three properties
+    with human-readable labels:
+
+    ds.labels = ['red', 'black', 'car', 'tree', 'grid', ...]
+    ds.categories = ['color', 'part', 'object', 'texture']
+    ds.label_category = [0, 0, 2, 2, 3, ...] # The category for each label
     '''
     def __init__(self, directory='dataset/broden', resolution=384,
             split='train', categories=None,
@@ -34,17 +41,18 @@ class BrodenDataset(torch.utils.data.Dataset):
         self.max_segment_depth = max_segment_depth
         with open(os.path.join(self.resdir, 'category.csv'),
                 encoding='utf-8') as f:
-            self.category = OrderedDict()
+            self.category_info = OrderedDict()
             for row in csv.DictReader(f):
-                self.category[row['name']] = row
+                self.category_info[row['name']] = row
         if categories is not None:
             # Filter out unused categories
-            categories = set([c for c in categories if c in self.category])
-            for cat in list(self.category.keys()):
+            categories = set([c for c in categories if c in self.category_info])
+            for cat in list(self.category_info.keys()):
                 if cat not in categories:
-                    del self.category[cat]
-        else:
-            categories = self.category.keys()
+                    del self.category_info[cat]
+        categories = list(self.category_info.keys())
+        self.categories = categories
+
         # Filter out unneeded images.
         with open(os.path.join(self.resdir, 'index.csv'),
                 encoding='utf-8') as f:
@@ -55,14 +63,15 @@ class BrodenDataset(torch.utils.data.Dataset):
             self.image = self.image[:size]
         with open(os.path.join(self.resdir, 'label.csv'),
                 encoding='utf-8') as f:
-            self.label = build_dense_label_array([
+            self.label_info = build_dense_label_array([
                 decode_label_dict(r) for r in csv.DictReader(f)])
+            self.labels = [l['name'] for l in self.label_info]
         # Build dense remapping arrays for labels, so that you can
         # get dense ranges of labels for each category.
         self.category_map = {}
         self.category_unmap = {}
         self.category_label = {}
-        for cat in self.category:
+        for cat in self.categories:
             with open(os.path.join(self.resdir, 'c_%s.csv' % cat),
                     encoding='utf-8') as f:
                 c_data = [decode_label_dict(r) for r in csv.DictReader(f)]
@@ -70,12 +79,12 @@ class BrodenDataset(torch.utils.data.Dataset):
                     build_numpy_category_map(c_data))
             self.category_label[cat] = build_dense_label_array(
                     c_data, key='code')
-        self.num_labels = len(self.label)
+        self.num_labels = len(self.labels)
         # Primary categories for each label is the category in which it
         # appears with the maximum coverage.
-        self.primary_category = numpy.zeros(self.num_labels, dtype=int)
+        self.label_category = numpy.zeros(self.num_labels, dtype=int)
         for i in range(self.num_labels):
-            maxcoverage, self.primary_category[i] = max(
+            maxcoverage, self.label_category[i] = max(
                (self.category_label[cat][self.category_map[cat][i]]['coverage']
                     if i < len(self.category_map[cat])
                        and self.category_map[cat][i] else 0, ic)
@@ -100,7 +109,7 @@ class BrodenDataset(torch.utils.data.Dataset):
         if self.include_bincount:
             bincount = numpy.zeros(shape=(self.num_labels,), dtype=int)
         depth = 0
-        for cat in self.category.keys():
+        for cat in self.categories:
             for layer in record[cat]:
                 if isinstance(layer, int):
                     segment[depth,:,:] = layer

@@ -82,14 +82,14 @@ def dissect(outdir, model, dataset,
                         recover_image.get_label_and_category_names(dataset))
             else:
                 labelnames, catnames = broden_label_and_category_names(dataset)
-            primary_category = [catnames.index(c) for l, c in labelnames]
+            label_category = [catnames.index(c) for l, c in labelnames]
             segloader = torch.utils.data.DataLoader(dataset,
                     batch_size=1, num_workers=num_workers,
                     pin_memory=(device.type == 'cuda'))
             lcs, ccs, ics = collect_bincounts(model, segloader, levels,
                     recover_image=recover_image)
             scores = {
-                    k: score_tally_stats(primary_category, lcs, ccs[k], ics[k])
+                    k: score_tally_stats(label_category, lcs, ccs[k], ics[k])
                     for k in ics}
             labeldata = (labelnames, catnames, scores, lcs, ccs, ics,
                     iou_threshold)
@@ -325,8 +325,8 @@ def generate_images(outdir, model, dataset, topk, levels,
                     Image.fromarray(strip[:,:strip.shape[1] // row_length
                         - gap_pixels,:]).save(single_filename)
 
-def score_tally_stats(primary_category, lc, cc, ic):
-    ec = cc[primary_category]
+def score_tally_stats(label_category, lc, cc, ic):
+    ec = cc[label_category]
     epsilon = 1e-20 # avoid division-by-zero
     iou = ic.double() / ((ec + lc[:,None] - ic).double() + epsilon)
     return iou
@@ -391,16 +391,16 @@ def collect_bincounts(model, segloader, levels, recover_image=None):
     if hasattr(recover_image, 'get_label_and_category_names'):
         labelcat, categories = recover_image.get_label_and_category_names(
                 segloader.dataset)
-        primary_category = [categories.index(c) for l, c in labelcat]
+        label_category = [categories.index(c) for l, c in labelcat]
         num_labels, num_categories = (len(n) for n in [labelcat, categories])
     else:
-        num_labels = segloader.dataset.num_labels
-        num_categories = len(segloader.dataset.category)
-        primary_category = segloader.dataset.primary_category
+        num_labels = len(segloader.dataset.labels)
+        num_categories = len(segloader.dataset.categories)
+        label_category = segloader.dataset.label_category
     # One-hot vector of category for each label
     labelcat = torch.zeros(num_labels, num_categories,
             dtype=torch.long, device=device)
-    labelcat.scatter_(1, torch.from_numpy(numpy.array(primary_category,
+    labelcat.scatter_(1, torch.from_numpy(numpy.array(label_category,
         dtype='int64')).to(device)[:,None], 1)
     # Running bincounts
     # activation_counts = {}
@@ -560,10 +560,10 @@ def retain_layers(model, layer_names, add_scale_offset=True):
         assert name in seen, ('Layer %s not found' % name)
 
 def broden_label_and_category_names(dataset):
-    catnames = list(dataset.category.keys())
-    label_and_cat_names = [(readable(l['name']),
-        catnames[dataset.primary_category[i]])
-            for i, l in enumerate(dataset.label)]
+    catnames = dataset.categories
+    label_and_cat_names = [(readable(label),
+        catnames[dataset.label_category[i]])
+            for i, label in enumerate(dataset.labels)]
     return label_and_cat_names, catnames
 
 def safe_dir_name(filename):
