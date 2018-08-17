@@ -26,7 +26,7 @@ directory), which can be overriden using `--broden [DIR]` or the broden
 argument in the API.  You can download the dataset as follows:
 
 ```
-netdissect --download
+python -m netdissect --download
 ```
 
 ## API
@@ -74,7 +74,8 @@ Example:
 Net dissect command-line utility.  Usage:
 
 ```
-usage: netdissect [-h] [--model MODEL] [--pthfile PTHFILE] [--outdir OUTDIR]
+usage: python -m netdissect [-h]
+                  [--model MODEL] [--pthfile PTHFILE] [--outdir OUTDIR]
                   [--layers LAYERS [LAYERS ...]] [--broden BRODEN]
                   [--download] [--imgsize IMGSIZE] [--netname NETNAME]
                   [--meta META [META ...]] [--examples EXAMPLES] [--size SIZE]
@@ -120,7 +121,7 @@ optional arguments:
 Example: to dissect three layers of the pretrained alexnet in torchvision:
 
 ```
-netdissect \
+python -m netdissect \
         --model "torchvision.models.alexnet(pretrained=True)" \
         --layers features.6:conv3 features.8:conv4 features.10:conv5 \
         --imgsize 227 \
