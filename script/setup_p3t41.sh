@@ -11,7 +11,7 @@
 # disk instead of leaving it on AFS, or else you will exhaust your quota.)
 
 # Start from parent directory of script
-cd "$(dirname "$(dirname "$(readlink -f "$0")")")"
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 # Default RECIPE 'p3t4' can be overridden by 'RECIPE=foo setup.sh'
 RECIPE=${RECIPE:-p3t4}
