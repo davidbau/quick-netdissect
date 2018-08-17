@@ -76,7 +76,7 @@ def main():
     parser.add_argument('--quiet', action='store_true', default=False,
                         help='silences console output')
     if len(sys.argv) == 1:
-        parser.print_help(sys.stderr)
+        parser.print_usage(sys.stderr)
         sys.exit(1)
     args = parser.parse_args()
     args.images = not args.no_images
