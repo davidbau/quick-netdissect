@@ -69,6 +69,17 @@
 }
 .img-wrapper {
   text-align: center;
+  position: relative;
+}
+.img-unmasked {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  opacity: 0;
+}
+.img-unmasked:active {
+  opacity: 1;
 }
 .big-modal img {
   max-height: 60vh;
@@ -200,7 +211,8 @@ sort by
       </div>
       <div class="modal-body">
         <div class="img-wrapper img-scroller">
-          <img class="fullsize img-fluid">
+          <img class="fullsize img-fluid img-main">
+          <img class="fullsize img-fluid img-unmasked">
         </div>
       </div>
       <div class="modal-footer">
@@ -212,7 +224,13 @@ sort by
 </div>
 <script>
 $(document).on('click', '[data-toggle=lightbox]', function(event) {
-    $('#lightbox img').attr('src', $(this).attr('href'));
+    $('#lightbox img.img-main').attr('src', $(this).attr('href'));
+    if ($(this).attr('href').match(/-top/)) {
+        $('#lightbox img.img-unmasked').attr('src',
+            $(this).attr('href').replace(/-top/, '-orig'));
+    } else {
+        $('#lightbox img.img-unmasked').attr('src', '');
+    }
     $('#lightbox .modal-title').text($(this).data('title') ||
        $(this).closest('.unit').find('.unitlabel').text());
     $('#lightbox .footer-caption').text($(this).data('footer') ||
