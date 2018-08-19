@@ -267,7 +267,7 @@ def generate_images(outdir, model, dataset, topk, levels,
     needed_sample = FixedSubsetSampler(sorted(needed_images.keys()))
     device = next(model.parameters()).device
     segloader = torch.utils.data.DataLoader(dataset,
-            batch_size=batch_size, num_workers=num_workers,
+            batch_size=5, num_workers=num_workers,
             pin_memory=(device.type == 'cuda'),
             sampler=needed_sample)
     vizgrid, maskgrid, origrid, seggrid = [{} for _ in range(4)]
@@ -282,8 +282,7 @@ def generate_images(outdir, model, dataset, topk, levels,
         if hasattr(recover_image, 'recover_im_seg_bc_and_features'):
             byte_im, seg, _, features, scale_offset = (
                     recover_image.recover_im_seg_bc_and_features(
-                        batch, model))
-            bc = batch_label_counts.cpu()
+                        batch, model, byte_images=True))
         else:
             im, seg, bc = batch
             byte_im = recover_image(im.clone()
