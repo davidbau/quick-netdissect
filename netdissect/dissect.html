@@ -71,15 +71,37 @@
   text-align: center;
   position: relative;
 }
-.img-unmasked {
+.img-mask, .img-seg {
   position: absolute;
   top: 0;
   left: 0;
   z-index: 0;
-  opacity: 0;
+  visibility: hidden;
 }
-.img-unmasked:active {
-  opacity: 1;
+input.hidden-toggle {
+  display: none;
+}
+#show-seg:checked ~ .img-wrapper .img-seg,
+#show-mask:checked ~ .img-wrapper .img-mask {
+  visibility: visible;
+}
+.img-controls {
+  text-align: right;
+}
+.img-controls label {
+  display: inline-block;
+  background: silver;
+  padding: 10px;
+  margin-top: 0;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+#show-seg:checked ~ .img-controls .toggle-seg,
+#show-mask:checked ~ .img-controls .toggle-mask {
+  background: navy;
+  color: white;
 }
 .big-modal img {
   max-height: 60vh;
@@ -210,9 +232,16 @@ sort by
         </button>
       </div>
       <div class="modal-body">
+        <input id="show-seg" class="hidden-toggle" type="checkbox">
+        <input id="show-mask" class="hidden-toggle" type="checkbox" checked>
         <div class="img-wrapper img-scroller">
-          <img class="fullsize img-fluid img-main">
-          <img class="fullsize img-fluid img-unmasked">
+          <img class="fullsize img-fluid img-orig">
+          <img class="fullsize img-fluid img-seg">
+          <img class="fullsize img-fluid img-mask">
+        </div>
+        <div class="img-controls">
+          <label for="show-seg" class="toggle-seg">segmentation</label>
+          <label for="show-mask" class="toggle-mask">mask</label>
         </div>
       </div>
       <div class="modal-footer">
@@ -224,12 +253,17 @@ sort by
 </div>
 <script>
 $(document).on('click', '[data-toggle=lightbox]', function(event) {
-    $('#lightbox img.img-main').attr('src', $(this).attr('href'));
+    $('#lightbox img.img-orig').attr('src', $(this).attr('href'));
     if ($(this).attr('href').match(/-top/)) {
-        $('#lightbox img.img-unmasked').attr('src',
-            $(this).attr('href').replace(/-top/, '-orig'));
+        $('#lightbox img.img-orig').attr('src',
+            $(this).attr('href').replace(/-top.jpg/, '-orig.jpg'));
+        $('#lightbox img.img-seg').attr('src',
+            $(this).attr('href').replace(/-top.jpg/, '-seg.png'));
+        $('#lightbox img.img-mask').attr('src',
+            $(this).attr('href').replace(/-top.jpg/, '-mask.png'));
+        $('#lightbox .img-seg, #lightbox .img-mask, .img-controls').show();
     } else {
-        $('#lightbox img.img-unmasked').attr('src', '');
+        $('#lightbox .img-seg, #lightbox .img-mask, .img-controls').hide();
     }
     $('#lightbox .modal-title').text($(this).data('title') ||
        $(this).closest('.unit').find('.unitlabel').text());

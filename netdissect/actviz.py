@@ -4,7 +4,8 @@ from scipy.misc import imread, imresize, imsave, toimage
 from scipy.interpolate import RectBivariateSpline
 
 def activation_visualization(image, data, level, alpha=0.3, source_shape=None,
-        crop=False, zoom=None, border=2, negate=False, **kwargs):
+        crop=False, zoom=None, border=2, negate=False, return_mask=False,
+        **kwargs):
     """
     Makes a visualiztion image of activation data overlaied on the image.
     Params:
@@ -43,9 +44,16 @@ def activation_visualization(image, data, level, alpha=0.3, source_shape=None,
     # Add a yellow border at the edge of the mask for contrast
     result = (mask[:, :, None] * (1 - alpha) + alpha) * image
     if border:
-        edge = mask_border(mask)[:,:,None] * numpy.array([[[200, 200, 0]]])
-        result = numpy.maximum(edge, result)
-    return result
+        edge = mask_border(mask)[:,:,None]
+        result = numpy.maximum(edge * numpy.array([[[200, 200, 0]]]), result)
+    if not return_mask:
+        return result
+    mask_image = (1 - mask[:, :, None]) * numpy.array(
+            [[[0, 0, 0, 255 * (1 - alpha)]]], dtype=numpy.uint8)
+    if border:
+        mask_image = numpy.maximum(edge * numpy.array([[[200, 200, 0, 255]]]),
+                mask_image)
+    return result, mask_image
 
 def activation_surface(data, target_shape=None, source_shape=None,
         scale_offset=None, deg=1, pad=True):

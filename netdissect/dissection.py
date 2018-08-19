@@ -39,6 +39,7 @@ from .progress import verbose_progress, default_progress, print_progress
 from .runningstats import RunningQuantile, RunningTopK
 from .sampler import FixedSubsetSampler
 from .actviz import activation_visualization
+from .segviz import segment_visualization
 
 def dissect(outdir, model, dataset,
         recover_image=None,
@@ -269,16 +270,20 @@ def generate_images(outdir, model, dataset, topk, levels,
             batch_size=batch_size, num_workers=num_workers,
             pin_memory=(device.type == 'cuda'),
             sampler=needed_sample)
-    vizgrid = {}
-    origrid = {}
+    vizgrid, maskgrid, origrid, seggrid = [{} for _ in range(4)]
     # Pass 2: populate vizgrid with visualizations of top units.
     for i, batch in enumerate(
             progress(segloader, desc='Making images')):
         # Reverse transformation to get the image in byte form.
-        if hasattr(recover_image, 'recover_image_and_features'):
-            byte_im, features, scale_offset = (
-                    recover_image.recover_image_and_features(
+        # if hasattr(recover_image, 'recover_image_and_features'):
+        #     byte_im, features, scale_offset = (
+        #             recover_image.recover_image_and_features(
+        #                batch, model))
+        if hasattr(recover_image, 'recover_im_seg_bc_and_features'):
+            byte_im, seg, _, features, scale_offset = (
+                    recover_image.recover_im_seg_bc_and_features(
                         batch, model))
+            bc = batch_label_counts.cpu()
         else:
             im, seg, bc = batch
             byte_im = recover_image(im.clone()
@@ -294,34 +299,42 @@ def generate_images(outdir, model, dataset, topk, levels,
             for layer, unit, rank in needed_images[imgnum]:
                 acts = features[layer]
                 if layer not in vizgrid:
-                    vizgrid[layer], origrid[layer] = [
+                    [vizgrid[layer], maskgrid[layer], origrid[layer],
+                            seggrid[layer]] = [
                         numpy.full((acts.shape[1], byte_im.shape[1], row_length,
-                            byte_im.shape[2] + gap_pixels, 3), 255,
+                            byte_im.shape[2] + gap_pixels, depth), 255,
                             dtype='uint8')
-                        for _ in [0, 1]]
+                        for depth in [3, 4, 3, 3]]
                 origrid[layer][unit,:,rank,:byte_im.shape[1],:] = byte_im[index]
-                vizgrid[layer][unit,:,rank,:byte_im.shape[1],:] = (
+                [vizgrid[layer][unit,:,rank,:byte_im.shape[1],:],
+                 maskgrid[layer][unit,:,rank,:byte_im.shape[1],:]] = (
                     activation_visualization(
                         byte_im[index],
                         acts[index, unit],
                         levels[layer][unit],
                         scale_offset=scale_offset[layer]
-                                     if scale_offset else None))
+                                     if scale_offset else None,
+                        return_mask=True))
+                seggrid[layer][unit,:,rank,:byte_im.shape[1],:] = (
+                    segment_visualization(seg[index].cpu().numpy(),
+                        byte_im.shape[1:3]))
     # Pass 3: save image strips as [outdir]/[layer]/[unitnum]-[top/orig].jpg
     for layer, vg in progress(vizgrid.items(), desc='Saving images'):
         os.makedirs(os.path.join(outdir, safe_dir_name(layer), 'image'),
                 exist_ok=True)
-        og = origrid[layer]
+        og, sg, mg = origrid[layer], seggrid[layer], maskgrid[layer]
         for unit in progress(range(len(vg)), desc='Units'):
-            for suffix, grid in [('top', vg), ('orig', og)]:
+            for suffix, grid in [('top.jpg', vg), ('orig.jpg', og),
+                    ('seg.png', sg), ('mask.png', mg)]:
                 strip = grid[unit].reshape(
-                        (grid.shape[1], grid.shape[2] * grid.shape[3], 3))
+                        (grid.shape[1], grid.shape[2] * grid.shape[3],
+                            grid.shape[4]))
                 filename = os.path.join(outdir, safe_dir_name(layer),
-                        'image', '%d-%s.jpg' % (unit, suffix))
+                        'image', '%d-%s' % (unit, suffix))
                 Image.fromarray(strip[:,:-gap_pixels,:]).save(filename)
                 if single_images:
                     single_filename = os.path.join(outdir, safe_dir_name(layer),
-                        'image', 's-%d-%s.jpg' % (unit, suffix))
+                        'image', 's-%d-%s' % (unit, suffix))
                     Image.fromarray(strip[:,:strip.shape[1] // row_length
                         - gap_pixels,:]).save(single_filename)
 
