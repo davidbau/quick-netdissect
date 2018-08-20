@@ -54,6 +54,7 @@ def dissect(outdir, model, dataset,
         make_single_images=False,
         netname=None,
         meta=None,
+        settings=None,
         ):
     '''
     Runs net dissection in-memory, using pytorch, and saves visualizations
@@ -101,11 +102,12 @@ def dissect(outdir, model, dataset,
                     quantiledata=quantiledata,
                     labeldata=labeldata,
                     netname=netname,
-                    meta=meta)
+                    meta=meta,
+                    settings=settings)
         return quantiledata, labeldata
 
 def generate_report(outdir, quantiledata, labeldata=None,
-        netname='Model', meta=None):
+        netname='Model', meta=None, settings=None):
     '''
     Creates dissection.json reports and summary bargraph.svg files in the
     specified output directory, and copies a dissection.html interface
@@ -122,6 +124,8 @@ def generate_report(outdir, quantiledata, labeldata=None,
             meta=meta,
             default_ranking='unit',
             quantile_threshold=quantile_threshold)
+    if settings is not None:
+        top_record['settings'] = settings
     if labeldata is not None:
         labelnames, catnames, scores, lcs, ccs, ics, iou_threshold = labeldata
         catorder = {'object': -6, 'scene': -5, 'part': -4,

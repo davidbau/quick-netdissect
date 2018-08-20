@@ -188,7 +188,8 @@ def main():
             make_report=args.report,
             make_single_images=args.single_images,
             batch_size=args.batch_size,
-            num_workers=args.num_workers)
+            num_workers=args.num_workers,
+            settings=vars(args))
 
 class AddPerturbation(object):
     def __init__(self, perturbation):
