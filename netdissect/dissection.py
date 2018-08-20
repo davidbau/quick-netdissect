@@ -334,12 +334,14 @@ def generate_images(outdir, model, dataset, topk, levels,
                             grid.shape[4]))
                 filename = os.path.join(outdir, safe_dir_name(layer),
                         'image', '%d-%s' % (unit, suffix))
-                Image.fromarray(strip[:,:-gap_pixels,:]).save(filename)
+                Image.fromarray(strip[:,:-gap_pixels,:]).save(filename,
+                        optimize=True, quality=80)
                 if single_images:
                     single_filename = os.path.join(outdir, safe_dir_name(layer),
                         'image', 's-%d-%s' % (unit, suffix))
                     Image.fromarray(strip[:,:strip.shape[1] // row_length
-                        - gap_pixels,:]).save(single_filename)
+                        - gap_pixels,:]).save(single_filename,
+                                optimize=True, quality=80)
 
 def score_tally_stats(label_category, lc, cc, ic):
     ec = cc[label_category]
