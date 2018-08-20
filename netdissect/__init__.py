@@ -35,6 +35,7 @@ Example:
 
 from .dissection import dissect, retain_layers, ReverseNormalize
 from .broden import BrodenDataset, ScaleSegmentation, scatter_batch
+from .segdata import MultiSegmentDataset
 from . import actviz
 from . import progress
 from . import runningstats
@@ -43,6 +44,7 @@ from . import sampler
 __all__ = [
     'dissect', 'retain_layers', 'ReverseNormalize',
     'BrodenDataset', 'ScaleSegmentation', 'scatter_batch',
+    'MultiSegmentDataset',
     'actviz',
     'progress',
     'runningstats',

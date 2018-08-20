@@ -1,7 +1,8 @@
-import torch, sys, os, argparse, textwrap, numbers, numpy, json
+import torch, sys, os, argparse, textwrap, numbers, numpy, json, PIL
 from torchvision import transforms
 from netdissect.progress import verbose_progress, print_progress
 from netdissect import retain_layers, BrodenDataset, dissect, ReverseNormalize
+from netdissect import MultiSegmentDataset
 
 help_epilog = '''\
 Example: to dissect three layers of the pretrained alexnet in torchvision:
@@ -39,8 +40,8 @@ def main():
     parser.add_argument('--layers', type=strpair, nargs='+',
                         help='space-separated list of layer names to dissect' + 
                         ', in the form layername[:reportedname]')
-    parser.add_argument('--broden', type=str, default='dataset/broden',
-                        help='directory containing Broden dataset')
+    parser.add_argument('--segments', type=str, default='dataset/broden',
+                        help='directory containing segmentation dataset')
     parser.add_argument('--download', action='store_true', default=False,
                         help='downloads Broden dataset if needed')
     parser.add_argument('--imgsize', type=intpair, default=(227, 227),
@@ -93,15 +94,15 @@ def main():
     if args.model is None and args.download:
         from netdissect.broden import ensure_broden_downloaded
         for resolution in [224, 227, 384]:
-            ensure_broden_downloaded(args.broden, resolution,
+            ensure_broden_downloaded(args.segments, resolution,
                     args.broden_version)
         sys.exit(0)
 
     # Help if broden is not present
-    if not os.path.isdir(args.broden):
-        print_progress('Broden dataset not found at %s.'  % args.broden)
-        print_progress('Specify dataset directory using --broden [DIR]')
-        print_progrees('To download, run: netdissect --download')
+    if not os.path.isdir(args.segments):
+        print_progress('Segmentation dataset not found at %s.'  % args.segments)
+        print_progress('Specify dataset directory using --segments [DIR]')
+        print_progress('To download Broden, run: netdissect --download')
         sys.exit(1)
 
     # Construct the network
@@ -158,27 +159,18 @@ def main():
     perturbation = numpy.load(args.perturbation) if args.perturbation else None
 
     # Load broden dataset
-    ds_resolution = (224 if max(args.imgsize) <= 224 else
-                     227 if max(args.imgsize) <= 227 else 384)
-    if not args.download and not os.path.isfile(os.path.join(args.broden,
-        'broden%d_%d' % (args.broden_version, ds_resolution), 'index.csv')):
-        print_progress('Broden%d at resolution %d not found in %s.' %
-                (args.broden_version, ds_resolution, args.broden))
-        print_progress('Add --download to download the dataset.')
+    ds = try_to_load_broden(args.segments, args.imgsize,
+            args.broden_version, perturbation, args.download, args.size)
+    if ds is None:
+        ds = try_to_load_multiseg(args.segments, args.imgsize,
+                perturbation, args.size)
+    if ds is None:
+        print_progress('No segmentation dataset found in %s' % args.segements)
+        print_progress('use --download to download Broden.')
         sys.exit(1)
 
-    bds = BrodenDataset(args.broden,
-            resolution=ds_resolution, download=args.download,
-            broden_version=args.broden_version,
-            transform_image=transforms.Compose([
-                transforms.Resize(args.imgsize),
-                AddPerturbation(perturbation),
-                transforms.ToTensor(),
-                transforms.Normalize(IMAGE_MEAN, IMAGE_STDEV)]),
-            size=args.size)
-
     # Run dissect
-    dissect(args.outdir, model, bds,
+    dissect(args.outdir, model, ds,
             recover_image=ReverseNormalize(IMAGE_MEAN, IMAGE_STDEV),
             examples_per_unit=args.examples,
             netname=args.netname,
@@ -267,6 +259,41 @@ def eval_constructor(term, construct_types=True):
     if isinstance(obj, type):
         obj = obj()
     return obj
+
+def try_to_load_broden(directory, imgsize, broden_version, perturbation,
+        download, size):
+    # Load broden dataset
+    ds_resolution = (224 if max(imgsize) <= 224 else
+                     227 if max(imgsize) <= 227 else 384)
+    if not os.path.isfile(os.path.join(directory,
+           'broden%d_%d' % (broden_version, ds_resolution), 'index.csv')):
+        return None
+    return BrodenDataset(directory,
+            resolution=ds_resolution,
+            download=download,
+            broden_version=broden_version,
+            transform_image=transforms.Compose([
+                transforms.Resize(imgsize),
+                AddPerturbation(perturbation),
+                transforms.ToTensor(),
+                transforms.Normalize(IMAGE_MEAN, IMAGE_STDEV)]),
+            size=size)
+
+def try_to_load_multiseg(directory, imgsize, perturbation, size):
+    if not os.path.isfile(os.path.join(directory, 'labelnames.json')):
+        return None
+    minsize = min(imgsize) if hasattr(imgsize, '__iter__') else imgsize
+    return MultiSegmentDataset(directory,
+            transform=(transforms.Compose([
+                transforms.Resize(minsize),
+                transforms.CenterCrop(imgsize),
+                AddPerturbation(perturbation),
+                transforms.ToTensor(),
+                transforms.Normalize(IMAGE_MEAN, IMAGE_STDEV)]),
+            transforms.Compose([
+                transforms.Resize(minsize, interpolation=PIL.Image.NEAREST),
+                transforms.CenterCrop(imgsize)])),
+            size=size)
 
 # Many models use this normalization.
 IMAGE_MEAN = [0.485, 0.456, 0.406]
