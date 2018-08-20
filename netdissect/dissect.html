@@ -142,6 +142,24 @@ input.hidden-toggle {
 .bg-inverse {
   background: #021B54;
 }
+.dropmenu {
+  display: inline-block;
+  vertical-align: top;
+  position: relative;
+}
+.dropmenulist {
+  pointer-events: auto;
+  visibility: hidden;
+  transition: visiblity 1s;
+  position: absolute;
+  z-index: 1;
+}
+.dropmenu:focus {
+  pointer-events: none;
+}
+.dropmenu:focus .dropmenulist {
+  visibility: visible;
+}
 </style>
 </head>
 <body class="unitviz">
@@ -186,13 +204,28 @@ with IoU &ge; {{dissect.iou_threshold}}
 
 <div class="sortheader">
 sort by
-<span v-for="rank in lrec['rankings']">
+<span v-for="rank in lrec['rankings']" v-if="!rank.metric">
 <span :class="{sortby: true, currentsort: sort_order == rank.name}"
       :data-ranking="rank.name"
       v-on:click="sort_order = $event.currentTarget.dataset.ranking"
       >{{rank.name}}</span>
 <span> </span>
 </span>
+<div class="dropmenu sortby" tabindex="0"
+      v-for="metric in _.filter(_.uniq(lrec.rankings.map(x => x.metric)))">
+   <div class="dropmenutop">
+      *-{{ metric }}
+   </div>
+   <div class="dropmenulist">
+        <div v-for="rank in lrec['rankings']" v-if="rank.metric == metric">
+        <span :class="{sortby: true, currentsort: sort_order == rank.name}"
+              :data-ranking="rank.name"
+              v-on:click="sort_order = $event.currentTarget.dataset.ranking"
+              >{{rank.name}}</span>
+        </div>
+   </div>
+</div>
+
 </div>
 
 </div>

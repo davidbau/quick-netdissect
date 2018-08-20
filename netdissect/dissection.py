@@ -147,7 +147,8 @@ def generate_report(outdir, quantiledata, labeldata=None,
                 top=[dict(imgnum=i.item(), maxact=a.item())
                     for i, a in zip(topi[u], topa[u])],
                 ))
-        rankings.append(dict(name="unit", ranking=list(range(len(topa)))))
+        rankings.append(dict(name="unit", score=list([
+            u for u in range(len(topa))])))
         # TODO: consider including stats and ranking based on quantiles,
         # variance, connectedness here.
 
@@ -181,11 +182,20 @@ def generate_report(outdir, quantiledata, labeldata=None,
                     r['labelnum'],                        # label
                     -r['iou']))                           # unit score
             # Add label and iou ranking.
-            rankings.append(dict(name="label", ranking=list(
-                ur['unit'] for ur in label_ordering)))
-            rankings.append(dict(name="iou", ranking=list(
-                ur['unit'] for ur in sorted(units, key=lambda x: -x['iou']))))
-
+            rankings.append(dict(name="label", score=numpy.argsort(list(
+                ur['unit'] for ur in label_ordering)).tolist()))
+            rankings.append(dict(name="iou", score=list(
+                -ur['iou'] for ur in units)))
+            # Add ranking for top labels
+            for labelnum in [n for n in sorted(labelunits.keys(), key=lambda x:
+                    -len(labelunits[x])) if len(labelunits[n])]:
+                label = labelnames[labelnum][0]
+                rankings.append(dict(name="%s-iou" % label,
+                    concept=label, metric='iou',
+                    score=(-lscore[labelnum, :]).tolist()))
+            # Add argsort to every ranking
+            for r in rankings:
+                r['ranking'] = numpy.argsort(r['score']).tolist()
             # Collate labels by category then frequency.
             record['labels'] = [dict(
                         label=labelnames[label][0],
