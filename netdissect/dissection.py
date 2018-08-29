@@ -130,6 +130,8 @@ def generate_report(outdir, quantiledata, labeldata=None,
         labelnames, catnames, scores, lcs, ccs, ics, iou_threshold = labeldata
         catorder = {'object': -6, 'scene': -5, 'part': -4,
                     'material': -3, 'texture': -2, 'color': -1}
+        for i, cat in enumerate(c for c in catnames if c not in catorder):
+            catorder[cat] = i
         catnumber = {n: i for i, n in enumerate(catnames)}
         top_record['default_ranking'] = 'label'
         top_record['iou_threshold'] = iou_threshold
