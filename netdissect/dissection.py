@@ -213,7 +213,7 @@ def generate_report(outdir, quantiledata, labeldata=None,
                                 default=0) # score
                             ))) if len(labelunits[label])]
             # Total number of interpretable units.
-            record['interpretable'] = sum(len(group)
+            record['interpretable'] = sum(len(group['units'])
                     for group in record['labels'])
             # Make a bargraph of labels
             os.makedirs(os.path.join(outdir, safe_dir_name(layer)),
